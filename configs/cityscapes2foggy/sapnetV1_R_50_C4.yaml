@@ -1,0 +1,79 @@
+_BASE_: "../Base-RCNN-C4.yaml"
+DATASETS:
+  SOURCE_DOMAIN:
+    TRAIN: ("cityscapes_train",) # use cityscapes2fog_train for Cycle GAN data 
+  TARGET_DOMAIN:
+    TRAIN: ("foggy-cityscapes_train",)
+  TRAIN: ("cityscapes_train",)
+  TEST: ("foggy-cityscapes_val",)
+MODEL:
+  META_ARCHITECTURE: "SAPRCNN"
+  BACKBONE:
+    FREEZE_AT: 1
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  KEYPOINT_ON: False
+  MASK_ON: False
+  DOMAIN_ADAPTATION_ON: True
+  ROI_HEADS:
+    NUM_CLASSES: 8
+  DA_HEAD:
+    NAME: "SAPNet" # MSCAM == SAPNetMSCAM
+    IN_FEATURE: "res4"
+    IN_CHANNELS: 1024
+    NUM_ANCHOR_IN_IMG: 15
+    EMBEDDING_KERNEL_SIZE: 3
+    EMBEDDING_NORM: True
+    EMBEDDING_DROPOUT: True
+    FUNC_NAME: "cross_entropy"
+    POOL_TYPE: 'avg'
+    LOSS_WEIGHT: 1.0
+    RPN_MEDM_ON: False # MEDM Loss
+    TARGET_ENT_LOSS_WEIGHT: 1.0
+    TARGET_DIV_LOSS_WEIGHT: -0.2
+    WINDOW_STRIDES: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+    WINDOW_SIZES: [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 35, 37]
+  PROPOSAL_GENERATOR:
+    NAME: "SAPRPN"
+INPUT:
+  # MIN_SIZE_TRAIN: (600,)
+  # MIN_SIZE_TRAIN_SAMPLING: "choice"
+  # MIN_SIZE_TEST: 600
+  MIN_SIZE_TRAIN: (800, 832, 864, 896, 928, 960, 992, 1024)
+  # MIN_SIZE_TRAIN: (800,)
+  MIN_SIZE_TRAIN_SAMPLING: "choice"
+  MIN_SIZE_TEST: 1024
+  MAX_SIZE_TRAIN: 2048
+  MAX_SIZE_TEST: 2048
+SOLVER:
+  NAME: "adam"
+  IMS_PER_BATCH: 2 # batch size
+  STEPS: (8000,16000)
+  BASE_LR: 0.00001
+  MAX_ITER: 30000
+  CHECKPOINT_PERIOD: 200
+  WARMUP_FACTOR: 0.002
+  WARMUP_ITERS: 200
+TEST:
+  AUG:
+    ENABLED: true
+    FLIP: true
+    MAX_SIZE: 4000
+    MIN_SIZES:
+    - 400
+    - 500
+    - 600
+    - 700
+    - 800
+    - 900
+    - 1000
+    - 1100
+    - 1200
+  DETECTIONS_PER_IMAGE: 100
+  EVAL_PERIOD: 200
+  EXPECTED_RESULTS: []
+  KEYPOINT_OKS_SIGMAS: []
+  PRECISE_BN:
+    ENABLED: false
+    NUM_ITER: 200
+VIS_PERIOD: 1000
+SEED: 37740409
