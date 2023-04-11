@@ -135,16 +135,18 @@ class SAPNetMSCAM4(nn.Module):
             rpn_logits_.append(r)
         rpn = rpn_logits_[0]
 
-        semantic_map = torch.zeros((feature.shape[0], 1, feature.shape[2], feature.shape[3])).cuda()
         for i in range(0, self.in_channels):
+            semantic_map = torch.zeros((feature.shape[0], 1, feature.shape[2], feature.shape[3])).cuda()
             for j in range(0, self.num_anchors):
             
                 semantic_map = semantic_map + self.iaff(feature[:, i:i+1, :, :], rpn[:, j:j+1, :, :]) # iAFF recurvise
-            semantic_map_sigmod = torch.sigmoid(semantic_map)
             if i == 0:
-                semantic_map_cat = semantic_map_sigmod
+                semantic_map_cat = semantic_map
             else:
-                semantic_map_cat = torch.cat((semantic_map_cat, semantic_map_sigmod), dim=1)
+                with torch.no_grad():
+                    semantic_map_cat = torch.cat((semantic_map_cat, semantic_map), dim=1)
+            if i % 10 == 0:
+                print (i)
             
 
         semantic_map = self.shared_semantic(semantic_map_cat)
