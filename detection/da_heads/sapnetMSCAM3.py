@@ -134,7 +134,8 @@ class SAPNetMSCAM3(nn.Module):
                 r = F.interpolate(r, size=(feature.size(2), feature.size(3)), mode='bilinear', align_corners=True)
             rpn_logits_.append(r)
         rpn_mscam = rpn_logits_[0]
-        rpn_mscam_pad_channel = torch.zeros((rpn_mscam.shape[0], feature.shape[1] - rpn_mscam.shape[1], rpn_mscam.shape[2], rpn_mscam.shape[3])).cuda()
+        rpn_mscam_pad_channel = torch.zeros((rpn_mscam.shape[0], feature.shape[1] - rpn_mscam.shape[1], 
+                                             rpn_mscam.shape[2], rpn_mscam.shape[3])).cuda()
         rpn_mscam_padded = torch.cat((rpn_mscam, rpn_mscam_pad_channel), dim=1)
         semantic_map = self.iaff(feature, rpn_mscam_padded) # iAFF
         semantic_map = self.shared_semantic(semantic_map)
