@@ -8,3 +8,10 @@ outputs
 pretrained
 test_images
 .vscode
+detection/__pycache__/
+detection/da_heads/__pycache__/
+detection/data/__pycache__/
+detection/evaluation/__pycache__/
+detection/layers/__pycache__/
+detection/meta_arch/__pycache__/
+detection/modeling/__pycache__/
