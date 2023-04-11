@@ -135,11 +135,7 @@ class SAPNetMSCAM3(nn.Module):
             rpn_logits_.append(r)
         rpn_mscam = rpn_logits_[0]
         rpn_mscam_pad_channel = torch.zeros((rpn_mscam.shape[0], feature.shape[1] - rpn_mscam.shape[1], rpn_mscam.shape[2], rpn_mscam.shape[3])).cuda()
-        # rpn_mscam = self.mscamA(rpn_mscam) # MSCAM
-        # feature_mscam = self.mscamF(feature) # MSCAM
         rpn_mscam_padded = torch.cat((rpn_mscam, rpn_mscam_pad_channel), dim=1)
-        # semantic_map = torch.cat((feature_mscam, rpn_mscam), dim=1)
-        # semantic_map = self.mscam(semantic_map) # MSCAM
         semantic_map = self.iaff(feature, rpn_mscam_padded) # iAFF
         semantic_map = self.shared_semantic(semantic_map)
         feature = self.embedding(feature) # feature embedding, input is features coming from backbone
