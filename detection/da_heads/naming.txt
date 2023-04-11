@@ -1,0 +1,4 @@
+MSCAM == mscam after concat
+MSCAM2 == two mscam before concat
+MSCAM3 == rpn pad zero +(iaff)+ feature
+MSCAM4 == rpn +(iaff)+ feature recursive

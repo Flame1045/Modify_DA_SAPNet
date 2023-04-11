@@ -4,4 +4,5 @@ from .sapnetiAFF import SAPNetiAFF
 from .sapnetAFF import SAPNetAFF
 from .sapnetMSCAM2 import SAPNetMSCAM2
 from .sapnetMSCAM3 import SAPNetMSCAM3
+from .sapnetMSCAM4 import SAPNetMSCAM4
 from .build import build_DAHead
