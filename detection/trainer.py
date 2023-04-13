@@ -10,16 +10,19 @@ from detectron2.utils.logger import setup_logger
 from detectron2.engine import DefaultTrainer, create_ddp_model, SimpleTrainer, hooks
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.modeling import build_model
+from detectron2.structures import ImageList, Instances, Boxes
+from typing import Dict, List, Optional, Tuple
 from torch.nn.parallel import DataParallel, DistributedDataParallel
 from fvcore.nn.precise_bn import get_bn_modules
 from torchvision.transforms.functional import center_crop as centcp
 from .evaluation.pascal_voc import PascalVOCDetectionEvaluator_
 from .data.build import build_DA_detection_train_loader
-
+from .da_heads.masking import Masking
+from .da_heads.teacher import EMATeacher
 
 class _DATrainer(SimpleTrainer):
     # one2one domain adpatation trainer
-    def __init__(self, model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer):
+    def __init__(self, model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg):
         """
         Args:
             model: a torch Module. Takes a data from data_loader and returns a
@@ -36,7 +39,6 @@ class _DATrainer(SimpleTrainer):
         like evaluation during training, you can overwrite its train() method.
         """
         model.train()
-
         self.model = model
         self.source_domain_data_loader = source_domain_data_loader
         self.target_domain_data_loader = target_domain_data_loader
@@ -44,6 +46,57 @@ class _DATrainer(SimpleTrainer):
         self._target_domain_data_loader_iter = iter(target_domain_data_loader)
         self.loss_weight = loss_weight
         self.optimizer = optimizer
+        self.cfg = cfg
+
+    def run_step(self):
+        assert self.model.training, "[_DATrainer] model was changed to eval mode!"
+
+        start = time.perf_counter()
+        s_data = next(self._source_domain_data_loader_iter)
+        data_time = time.perf_counter() - start
+
+        start = time.perf_counter()
+        t_data = next(self._target_domain_data_loader_iter)
+        data_time = time.perf_counter() - start + data_time
+        # test = my_preprocess_image(self=self.model, batched_inputs=t_data)
+        loss_dict = self.model(s_data, t_data, cfg=self.cfg)
+        loss_dict = {l: self.loss_weight[l] * loss_dict[l] for l in self.loss_weight}
+        losses = sum(loss_dict.values())
+        self.optimizer.zero_grad()
+        losses.backward()
+        self._write_metrics(loss_dict, data_time)
+        self.optimizer.step()
+
+class _DATrainer_MIC(SimpleTrainer):
+    # one2one domain adpatation trainer
+    def __init__(self, model, teacher_model, masking, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg):
+        """
+        Args:
+            model: a torch Module. Takes a data from data_loader and returns a
+                dict of losses.
+            data_loader: an iterable. Contains data to be used to call model.
+            optimizer: a torch optimizer.
+        """
+        super(SimpleTrainer).__init__()
+
+        """
+        We set the model to training mode in the trainer.
+        However it's valid to train a model that's in eval mode.
+        If you want your model (or a submodule of it) to behave
+        like evaluation during training, you can overwrite its train() method.
+        """
+        model.train()
+        self.model = model
+        self.source_domain_data_loader = source_domain_data_loader
+        self.target_domain_data_loader = target_domain_data_loader
+        self._source_domain_data_loader_iter = iter(source_domain_data_loader)
+        self._target_domain_data_loader_iter = iter(target_domain_data_loader)
+        self.loss_weight = loss_weight
+        self.optimizer = optimizer
+        self.cfg = cfg
+        self.model_teacher = teacher_model
+        self.masking = masking
+        self.iterations = torch.tensor([0]).to(self.model.device)
 
     def run_step(self):
         assert self.model.training, "[_DATrainer] model was changed to eval mode!"
@@ -56,13 +109,24 @@ class _DATrainer(SimpleTrainer):
         t_data = next(self._target_domain_data_loader_iter)
         data_time = time.perf_counter() - start + data_time
 
-        loss_dict = self.model(s_data, t_data)
+        if self.cfg.MODEL.DA_HEAD.MIC_ON == True:
+            print('MIC_ON')
+            # loss_dict = self.model(source_batched_inputs=s_data, target_batched_inputs=t_data, cfg=self.cfg) 
+            self.model_teacher.update_weights(self.model, True)
+            target_output = self.model_teacher(target_img=t_data, cfg=self.cfg)
+            target_pseudo_labels, pseudo_masks = process_pred2label(target_output, threshold=self.cfg.MODEL.DA_HEAD.PSEUDO_LABEL_THRESHOLD)
+            self.model.train()
+            loss_dict = self.model(source_batched_inputs=s_data, target_batched_inputs=t_data,
+                        mt_batched_inputs=t_data, masking=self.masking, pseudo_gt=target_pseudo_labels, cfg=self.cfg)                     
+        else:
+            loss_dict = self.model(s_data, t_data, self.cfg)
 
         loss_dict = {l: self.loss_weight[l] * loss_dict[l] for l in self.loss_weight}
         losses = sum(loss_dict.values())
-        self.optimizer.zero_grad()
-        losses.backward()
+        # self.optimizer.zero_grad()
         self._write_metrics(loss_dict, data_time)
+        torch.autograd.set_detect_anomaly(True)
+        losses.backward()
         self.optimizer.step()
 
 
@@ -147,10 +211,25 @@ class DATrainer(DefaultTrainer):
 
         if cfg.MODEL.DA_HEAD.RPN_MEDM_ON:
             loss_weight.update({'loss_target_entropy': cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT, 'loss_target_diversity': cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT})
-
-        self._trainer = (_DAAMPTrainer if cfg.SOLVER.AMP.ENABLED else _DATrainer)(
-            model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer
-        )
+        if cfg.MODEL.DA_HEAD.MIC_ON:
+            loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1})
+            masking = Masking(
+                block_size=cfg.MODEL.DA_HEAD.MASKING_BLOCK_SIZE,
+                ratio=cfg.MODEL.DA_HEAD.MASKING_RATIO,
+                color_jitter_s=cfg.MODEL.DA_HEAD.MASK_COLOR_JITTER_S, 
+                color_jitter_p=cfg.MODEL.DA_HEAD.MASK_COLOR_JITTER_P, 
+                blur=cfg.MODEL.DA_HEAD.MASK_BLUR,                      
+                mean=cfg.MODEL.DA_HEAD.PIXEL_MEAN,                      
+                std=cfg.MODEL.DA_HEAD.PIXEL_STD)
+            teacher_model = EMATeacher(model, alpha=cfg.MODEL.DA_HEAD.TEACHER_ALPHA).to(model.device)
+            teacher_model.eval()
+            self._trainer = (_DATrainer_MIC)(
+                model, teacher_model, masking, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg
+            )     
+        else:
+            self._trainer = (_DAAMPTrainer if cfg.SOLVER.AMP.ENABLED else _DATrainer)(
+                model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg
+            )
 
         self.scheduler = self.build_lr_scheduler(cfg, optimizer)
         self.checkpointer = DetectionCheckpointer(
@@ -468,3 +547,44 @@ class GramCamForObjectDetection:
             self.model.zero_grad()
         final_cam = final_cam.clamp(min=0., max=1.)
         return final_cam, data[0]['file_name']
+    
+    
+def process_pred2label(target_output, threshold=0.7):
+    from .modeling.bounding_box import BoxList
+    pseudo_labels_list = []
+    masks = []
+    output_instances = []
+    for idx, bbox_l in enumerate(target_output):
+        pred_bboxes = bbox_l._fields['proposal_boxes'].tensor.detach()
+        scores = bbox_l._fields['objectness_logits'].detach()
+        labels = torch.zeros(scores.shape, dtype=torch.int64).to(scores.device).detach()
+        # print(torch.max(scores))
+        filtered_idx = scores>=threshold
+        filtered_bboxes = pred_bboxes[filtered_idx]
+        filtered_labels = labels[filtered_idx]
+        new_bbox_list = BoxList(filtered_bboxes, bbox_l._image_size, mode="xyxy")
+        new_bbox_list.add_field("labels", filtered_labels)
+        domain_labels = torch.ones_like(filtered_labels, dtype=torch.uint8).to(filtered_labels.device)
+        new_bbox_list.add_field("is_source", domain_labels)
+
+        if len(new_bbox_list)>0:
+            pseudo_labels_list.append(new_bbox_list)
+            masks.append(idx)
+        tmp = Instances(pseudo_labels_list[idx].size)
+        tmp.gt_boxes = Boxes(pseudo_labels_list[idx].bbox)
+        tmp.gt_classes = filtered_labels
+        output_instances.append(tmp)
+    return output_instances, masks
+
+def my_preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]]):
+        """
+        Normalize, pad and batch the input images.
+        """
+        images = [self._move_to_current_device(x["image"]) for x in batched_inputs]
+        images = [(x - self.pixel_mean) / self.pixel_std for x in images]
+        images = ImageList.from_tensors(
+            images,
+            self.backbone.size_divisibility,
+            padding_constraints=self.backbone.padding_constraints,
+        )
+        return images

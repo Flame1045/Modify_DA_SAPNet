@@ -8,6 +8,9 @@ from detectron2.modeling.meta_arch import GeneralizedRCNN
 from detectron2.modeling import Backbone, build_backbone, build_proposal_generator, build_roi_heads, META_ARCH_REGISTRY
 from detectron2.utils.events import get_event_storage
 from ..da_heads import build_DAHead
+from ..da_heads import Masking
+from ..da_heads import EMATeacher
+
 
 @META_ARCH_REGISTRY.register()
 class SAPRCNN(GeneralizedRCNN):
@@ -50,7 +53,8 @@ class SAPRCNN(GeneralizedRCNN):
             "pixel_std": cfg.MODEL.PIXEL_STD,
         }
 
-    def forward(self, source_batched_inputs: List[Dict[str, torch.Tensor]], target_batched_inputs:List[Dict[str, torch.Tensor]]=None):
+    def forward(self, source_batched_inputs: List[Dict[str, torch.Tensor]]=None, target_batched_inputs:List[Dict[str, torch.Tensor]]=None,
+                mt_batched_inputs: List[Dict[str, torch.Tensor]]=None, cfg=None, masking=None, pseudo_gt=None, pseduo_flag=False, losses=None):
         """
         training flow
         Args:
@@ -71,20 +75,40 @@ class SAPRCNN(GeneralizedRCNN):
                 The :class:`Instances` object has the following keys:
                 "pred_boxes", "pred_classes", "scores", "pred_masks", "pred_keypoints"
         """
-        if not self.training:
+        # masking image 
+        # if masking is not None:
+        #     return self.preprocess_image(target_batched_inputs).tensor                  
+        if not self.training and pseduo_flag is False:
             return self.inference(source_batched_inputs)
         # source domain input
-        s_images = self.preprocess_image(source_batched_inputs)
-        if "instances" in source_batched_inputs[0]:
-            gt_instances = [x["instances"].to(self.device) for x in source_batched_inputs]
-        else:
-            gt_instances = None 
-        s_features = self.backbone(s_images.tensor)
+        if source_batched_inputs is not None:
+            s_images = self.preprocess_image(source_batched_inputs)
+            if "instances" in source_batched_inputs[0]:
+                gt_instances = [x["instances"].to(self.device) for x in source_batched_inputs]
+            else:
+                gt_instances = None 
+            s_features = self.backbone(s_images.tensor)
+            # s_features, s_images, gt_instances
 
+        # target domain input, proposal_generator == RPN
         if self.da_heads:
-            # target domain input
-            t_images = self.preprocess_image(target_batched_inputs)
-            t_features = self.backbone(t_images.tensor)
+            if target_batched_inputs is not None:
+                t_images = self.preprocess_image(target_batched_inputs)
+                t_features = self.backbone(t_images.tensor)
+            if cfg.MODEL.DA_HEAD.MIC_ON:
+                if pseudo_gt is not None:
+                    mt_images = self.preprocess_image(mt_batched_inputs)
+                    masked_images = masking(mt_images.tensor)
+                    masked_features = self.backbone(masked_images) 
+                    mt_proposals, mt_proposal_losses, mt_rpn_logits = self.proposal_generator(mt_images, masked_features, pseudo_gt, mask_flag=True)
+                    mt_proposal_losses['loss_mt_rpn_cls'] = mt_proposal_losses['loss_rpn_cls'].clone()
+                    mt_proposal_losses['loss_mt_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone()
+                    del mt_proposal_losses['loss_rpn_cls'], mt_proposal_losses['loss_rpn_loc']
+                    # losses.update(mt_proposal_losses)
+                    # return losses
+                if pseduo_flag:
+                    t_images_output, _, _ = self.proposal_generator(t_images, t_features, None)
+                    return t_images_output
             _, medm_loss, t_rpn_logits = self.proposal_generator(t_images, t_features, None)
             s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances)
             da_source_loss = self.da_heads(s_features[self.in_feature_da_heads], s_rpn_logits, 'source')
@@ -97,7 +121,8 @@ class SAPRCNN(GeneralizedRCNN):
                 s_proposals = [x["proposals"].to(self.device) for x in source_batched_inputs]
                 proposal_losses = {}
 
-        _, detector_losses = self.roi_heads(s_images, s_features, s_proposals, gt_instances)
+        if source_batched_inputs is not None:
+            _, detector_losses = self.roi_heads(s_images, s_features, s_proposals, gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
@@ -111,6 +136,8 @@ class SAPRCNN(GeneralizedRCNN):
             losses.update(da_target_loss)
             if medm_loss:
                 losses.update(medm_loss)
+        if pseudo_gt is not None:
+            losses.update(mt_proposal_losses)
         return losses
 
     def inference(

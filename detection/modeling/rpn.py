@@ -81,6 +81,7 @@ class SAPRPN(RPN):
         images: ImageList,
         features: Dict[str, torch.Tensor],
         gt_instances: Optional[List[Instances]] = None,
+        mask_flag=False,
     ):
         """
         Args:
@@ -117,8 +118,14 @@ class SAPRPN(RPN):
             .flatten(1, -2)
             for x in pred_anchor_deltas
         ]
-        is_target_domain = self.training and gt_instances is None
-        if self.training and not is_target_domain:
+        is_target_domain = self.training and gt_instances is None or mask_flag
+        if mask_flag:
+            assert gt_instances is not None, "MIC requires gt_instances in training!"
+            gt_labels, gt_boxes = self.label_and_sample_anchors(anchors, gt_instances)
+            losses = self.losses(
+                anchors, pred_objectness_logits, gt_labels, pred_anchor_deltas, gt_boxes
+            )
+        elif self.training and not is_target_domain:
             assert gt_instances is not None, "RPN requires gt_instances in training!"
             # filtering out of boundary anchor in label_and_sample_anchors, but default is not used
             gt_labels, gt_boxes = self.label_and_sample_anchors(anchors, gt_instances)
@@ -128,7 +135,7 @@ class SAPRPN(RPN):
         else:
             losses = {}
 
-        if is_target_domain and self.medm_on:
+        if is_target_domain and self.medm_on and not mask_flag:
             medm_loss = MEDMLoss(pred_objectness_logits[0])
             losses.update(medm_loss)
 
