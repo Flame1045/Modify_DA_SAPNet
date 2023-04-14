@@ -110,11 +110,11 @@ class _DATrainer_MIC(SimpleTrainer):
         data_time = time.perf_counter() - start + data_time
 
         if self.cfg.MODEL.DA_HEAD.MIC_ON == True:
-            print('MIC_ON')
+            # print('MIC_ON')
             # loss_dict = self.model(source_batched_inputs=s_data, target_batched_inputs=t_data, cfg=self.cfg) 
             self.model_teacher.update_weights(self.model, True)
             target_output = self.model_teacher(target_img=t_data, cfg=self.cfg)
-            target_pseudo_labels, pseudo_masks = process_pred2label(target_output, threshold=self.cfg.MODEL.DA_HEAD.PSEUDO_LABEL_THRESHOLD)
+            target_pseudo_labels, _ = process_pred2label(target_output, threshold=self.cfg.MODEL.DA_HEAD.PSEUDO_LABEL_THRESHOLD)
             self.model.train()
             loss_dict = self.model(source_batched_inputs=s_data, target_batched_inputs=t_data,
                         mt_batched_inputs=t_data, masking=self.masking, pseudo_gt=target_pseudo_labels, cfg=self.cfg)                     
@@ -567,11 +567,11 @@ def process_pred2label(target_output, threshold=0.7):
         domain_labels = torch.ones_like(filtered_labels, dtype=torch.uint8).to(filtered_labels.device)
         new_bbox_list.add_field("is_source", domain_labels)
 
-        if len(new_bbox_list)>0:
-            pseudo_labels_list.append(new_bbox_list)
-            masks.append(idx)
-        tmp = Instances(pseudo_labels_list[idx].size)
-        tmp.gt_boxes = Boxes(pseudo_labels_list[idx].bbox)
+        # if len(new_bbox_list)>0:
+        #     pseudo_labels_list.append(new_bbox_list)
+        #     masks.append(idx)
+        tmp = Instances(new_bbox_list.size)
+        tmp.gt_boxes = Boxes(new_bbox_list.bbox)
         tmp.gt_classes = filtered_labels
         output_instances.append(tmp)
     return output_instances, masks

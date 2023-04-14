@@ -8,6 +8,12 @@ python -m pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wh
 
 conda install -c conda-forge tensorboard
 
+conda install -c conda-forge kornia
+
+conda install -c conda-forge einops
+
+conda install -c conda-forge timm
+
 pip install opencv-python
 
 pip install pycocotools

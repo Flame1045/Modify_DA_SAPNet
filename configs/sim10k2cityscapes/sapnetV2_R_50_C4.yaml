@@ -27,10 +27,11 @@ MODEL:
     FUNC_NAME: "cross_entropy"
     POOL_TYPE: 'avg'
     LOSS_WEIGHT: 0.1
-    RPN_MEDM_ON: True # use MEDM Loss
+    RPN_MEDM_ON: False # use MEDM Loss
     TARGET_ENT_LOSS_WEIGHT: 0.8
     TARGET_DIV_LOSS_WEIGHT: -0.3
-    MIC_ON: True # use MIC Loss
+    # use MIC Loss #
+    MIC_ON: True 
     MASKING_BLOCK_SIZE: 32
     MASKING_RATIO: 0.5
     MASK_COLOR_JITTER_S: 0.2
@@ -39,7 +40,8 @@ MODEL:
     PIXEL_MEAN: [0.485, 0.456, 0.406]
     PIXEL_STD: [0.229, 0.224, 0.225]
     TEACHER_ALPHA: 0.9
-    PSEUDO_LABEL_THRESHOLD: 0.7
+    PSEUDO_LABEL_THRESHOLD: 0.8  
+    # use MIC Loss #
     WINDOW_STRIDES: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
     WINDOW_SIZES: [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 35, 37]
   PROPOSAL_GENERATOR:
@@ -55,7 +57,7 @@ SOLVER:
   NAME: "adam"
   IMS_PER_BATCH: 2 # batch size
   STEPS: (8000,)
-  BASE_LR: 0.00001
+  BASE_LR: 0.0025
   MAX_ITER: 20000  #14000
   CHECKPOINT_PERIOD: 200
   WARMUP_ITERS: 500
