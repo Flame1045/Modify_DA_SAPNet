@@ -212,7 +212,7 @@ class DATrainer(DefaultTrainer):
         if cfg.MODEL.DA_HEAD.RPN_MEDM_ON:
             loss_weight.update({'loss_target_entropy': cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT, 'loss_target_diversity': cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT})
         if cfg.MODEL.DA_HEAD.MIC_ON:
-            loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1})
+            loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1, 'loss_mt_cls': 1, 'loss_mt_box_reg': 1})
             masking = Masking(
                 block_size=cfg.MODEL.DA_HEAD.MASKING_BLOCK_SIZE,
                 ratio=cfg.MODEL.DA_HEAD.MASKING_RATIO,
@@ -555,21 +555,28 @@ def process_pred2label(target_output, threshold=0.7):
     masks = []
     output_instances = []
     for idx, bbox_l in enumerate(target_output):
+        # get predict boxes
         pred_bboxes = bbox_l._fields['proposal_boxes'].tensor.detach()
+        # get predict logits(which can be negative and need to be converted to probability)
         scores = bbox_l._fields['objectness_logits'].detach()
+        # set predict labels, only works for single class
         labels = torch.zeros(scores.shape, dtype=torch.int64).to(scores.device).detach()
-        # print(torch.max(scores))
+        # convert logits to probability
+        scores = torch.sigmoid(scores)
+        # filter out low probability boxes, and its corresponding labels
         filtered_idx = scores>=threshold
         filtered_bboxes = pred_bboxes[filtered_idx]
         filtered_labels = labels[filtered_idx]
+        # create new BoxList, which is used to store filtered_bboxes(Tensor)
         new_bbox_list = BoxList(filtered_bboxes, bbox_l._image_size, mode="xyxy")
-        new_bbox_list.add_field("labels", filtered_labels)
-        domain_labels = torch.ones_like(filtered_labels, dtype=torch.uint8).to(filtered_labels.device)
-        new_bbox_list.add_field("is_source", domain_labels)
+        # new_bbox_list.add_field("labels", filtered_labels)
+        # domain_labels = torch.ones_like(filtered_labels, dtype=torch.uint8).to(filtered_labels.device)
+        # new_bbox_list.add_field("is_source", domain_labels)
 
         # if len(new_bbox_list)>0:
         #     pseudo_labels_list.append(new_bbox_list)
         #     masks.append(idx)
+        # convert to gt_instances format(Instances)
         tmp = Instances(new_bbox_list.size)
         tmp.gt_boxes = Boxes(new_bbox_list.bbox)
         tmp.gt_classes = filtered_labels
