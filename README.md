@@ -3,6 +3,7 @@ This is a modift SAPNet for Domain Adaption research
 Modify by Eric Chiu
 
 # Debug config
+```
 {
     "version": "0.2.0",
     "configurations": [
@@ -23,7 +24,7 @@ Modify by Eric Chiu
         }
     ]
 }
-
+```
 
 # Acknowledgement
 * [SAPNetDA](https://isrc.iscas.ac.cn/gitlab/research/domain-adaption)
