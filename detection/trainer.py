@@ -569,13 +569,6 @@ def process_pred2label(target_output, threshold=0.7):
         filtered_labels = labels[filtered_idx]
         # create new BoxList, which is used to store filtered_bboxes(Tensor)
         new_bbox_list = BoxList(filtered_bboxes, bbox_l._image_size, mode="xyxy")
-        # new_bbox_list.add_field("labels", filtered_labels)
-        # domain_labels = torch.ones_like(filtered_labels, dtype=torch.uint8).to(filtered_labels.device)
-        # new_bbox_list.add_field("is_source", domain_labels)
-
-        # if len(new_bbox_list)>0:
-        #     pseudo_labels_list.append(new_bbox_list)
-        #     masks.append(idx)
         # convert to gt_instances format(Instances)
         tmp = Instances(new_bbox_list.size)
         tmp.gt_boxes = Boxes(new_bbox_list.bbox)
