@@ -17,7 +17,7 @@ MODEL:
   ROI_HEADS:
     NUM_CLASSES: 1
   DA_HEAD:
-    NAME: "SAPNetMSCAM3" # use MSCAM or iAFF
+    NAME: "SAPNet" # use MSCAM or iAFF
     IN_FEATURE: "res4"
     IN_CHANNELS: 1024
     NUM_ANCHOR_IN_IMG: 15
@@ -27,16 +27,16 @@ MODEL:
     FUNC_NAME: "cross_entropy"
     POOL_TYPE: 'avg'
     LOSS_WEIGHT: 0.1
-    RPN_MEDM_ON: True # use MEDM Loss
+    RPN_MEDM_ON: False # use MEDM Loss
     TARGET_ENT_LOSS_WEIGHT: 0.8
     TARGET_DIV_LOSS_WEIGHT: -0.3
     # use MIC Loss #
-    MIC_ON: False
+    MIC_ON: True
     MASKING_BLOCK_SIZE: 32
     MASKING_RATIO: 0.5
     MASK_COLOR_JITTER_S: 0.2
     MASK_COLOR_JITTER_P: 0.2
-    MASK_BLUR: True
+    MASK_BLUR: False
     PIXEL_MEAN: [0.485, 0.456, 0.406]
     PIXEL_STD: [0.229, 0.224, 0.225]
     TEACHER_ALPHA: 0.9

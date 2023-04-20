@@ -1,6 +1,6 @@
 # evaluate source only object detector
 echo "start to evaluate source only object detector"
-model_path="pretrained/sim2city-sapnetv2/model_0006199_MAP_50.pth"
+model_path="pretrained/sim2city-sapnetv2/model_0015999_MAP_52.pth"
 python tools/train_net.py --config-file "configs/sim10k2cityscapes/source_only_R_50_C4.yaml" --num-gpus 1 --eval-only \
 MODEL.WEIGHTS ${model_path}
 
