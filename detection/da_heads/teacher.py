@@ -15,6 +15,10 @@ class EMATeacher(nn.Module):
 
     def _init_ema_weights(self, model):
         self.ema_model.load_state_dict(model.state_dict())
+        # self.ema_model.load_state_dict(torch.load(
+        #     "outputs/output-sim10k2city-sapnetV2-l0.1-e0.8-d0.3-23-04-05_16-41/model_0015999.pth", 
+        #     map_location='cpu'
+        #     ))
 
     def _update_ema(self, model, iter):
         student_model_dict = model.state_dict()
@@ -32,7 +36,7 @@ class EMATeacher(nn.Module):
 
     def update_weights(self, model, iter):
         # Init/update ema model
-        if iter == True:
+        if iter == 0:
             self._init_ema_weights(model)
         if iter > 0:
             self._update_ema(model, iter)

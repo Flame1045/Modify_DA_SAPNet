@@ -96,7 +96,7 @@ class _DATrainer_MIC(SimpleTrainer):
         self.cfg = cfg
         self.model_teacher = teacher_model
         self.masking = masking
-        self.iterations = torch.tensor([0]).to(self.model.device)
+        self.iterations = 0
 
     def run_step(self):
         assert self.model.training, "[_DATrainer] model was changed to eval mode!"
@@ -110,9 +110,8 @@ class _DATrainer_MIC(SimpleTrainer):
         data_time = time.perf_counter() - start + data_time
 
         if self.cfg.MODEL.DA_HEAD.MIC_ON == True:
-            # print('MIC_ON')
-            # loss_dict = self.model(source_batched_inputs=s_data, target_batched_inputs=t_data, cfg=self.cfg) 
-            self.model_teacher.update_weights(self.model, True)
+            self.model_teacher.update_weights(self.model, self.iterations)
+            self.iterations += 1
             target_output = self.model_teacher(target_img=t_data, cfg=self.cfg)
             target_pseudo_labels, _ = process_pred2label(target_output, threshold=self.cfg.MODEL.DA_HEAD.PSEUDO_LABEL_THRESHOLD)
             self.model.train()
@@ -212,7 +211,8 @@ class DATrainer(DefaultTrainer):
         if cfg.MODEL.DA_HEAD.RPN_MEDM_ON:
             loss_weight.update({'loss_target_entropy': cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT, 'loss_target_diversity': cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT})
         if cfg.MODEL.DA_HEAD.MIC_ON:
-            loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1, 'loss_mt_cls': 1, 'loss_mt_box_reg': 1})
+            # loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1, 'loss_mt_cls': 1, 'loss_mt_box_reg': 1})
+            loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1})
             masking = Masking(
                 block_size=cfg.MODEL.DA_HEAD.MASKING_BLOCK_SIZE,
                 ratio=cfg.MODEL.DA_HEAD.MASKING_RATIO,

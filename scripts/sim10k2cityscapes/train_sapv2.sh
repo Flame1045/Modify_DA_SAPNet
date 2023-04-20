@@ -1,5 +1,5 @@
 source_model_path="pretrained/sim2city-baseline-source-only/model_0033999_MAP_38_86.pth"
-
+# source_model_path="pretrained/sim2city-sapnetv2/model_0015999_MAP_52.pth"
 # SAPNetV2
 weight_DA=0.1
 weight_entropy=0.8

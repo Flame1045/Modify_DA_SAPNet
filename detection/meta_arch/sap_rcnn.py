@@ -104,10 +104,10 @@ class SAPRCNN(GeneralizedRCNN):
                     mt_proposal_losses['loss_mt_rpn_cls'] = mt_proposal_losses['loss_rpn_cls'].clone()
                     mt_proposal_losses['loss_mt_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone()
                     del mt_proposal_losses['loss_rpn_cls'], mt_proposal_losses['loss_rpn_loc']
-                    _, mt_detector_losses = self.roi_heads(mt_images, masked_features, mt_proposals, pseudo_gt)
-                    mt_detector_losses['loss_mt_cls'] = mt_detector_losses['loss_cls'].clone()
-                    mt_detector_losses['loss_mt_box_reg'] = mt_detector_losses['loss_box_reg'].clone()
-                    del mt_detector_losses['loss_cls'], mt_detector_losses['loss_box_reg']
+                    # _, mt_detector_losses = self.roi_heads(mt_images, masked_features, mt_proposals, pseudo_gt)
+                    # mt_detector_losses['loss_mt_cls'] = mt_detector_losses['loss_cls'].clone()
+                    # mt_detector_losses['loss_mt_box_reg'] = mt_detector_losses['loss_box_reg'].clone()
+                    # del mt_detector_losses['loss_cls'], mt_detector_losses['loss_box_reg']
                     # losses.update(mt_proposal_losses)
                     # return losses
                 if pseduo_flag:
@@ -142,7 +142,7 @@ class SAPRCNN(GeneralizedRCNN):
                 losses.update(medm_loss)
         if pseudo_gt is not None:
             losses.update(mt_proposal_losses)
-            losses.update(mt_detector_losses)
+            # losses.update(mt_detector_losses)
         return losses
 
     def inference(
