@@ -60,7 +60,7 @@ class SAPNetMSCAM4(nn.Module):
         padding = (embedding_kernel_size - 1) // 2
         bias = not embedding_norm
         self.embedding = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding, bias=bias),
+            nn.Conv2d(num_anchors, in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding, bias=bias),
             NormModule(in_channels),
             nn.ReLU(True),
             DropoutModule(),
@@ -77,8 +77,8 @@ class SAPNetMSCAM4(nn.Module):
         )
 
         self.shared_semantic = nn.Sequential(
-            # nn.Conv2d(in_channels , in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding),
-            # nn.ReLU(True),
+            nn.Conv2d(num_anchors , in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding),
+            nn.ReLU(True),
             nn.Conv2d(in_channels, 256, kernel_size=embedding_kernel_size, stride=1, padding=padding),
             nn.ReLU(True),
             nn.Conv2d(256, 256, kernel_size=embedding_kernel_size, stride=1, padding=padding),
@@ -88,7 +88,7 @@ class SAPNetMSCAM4(nn.Module):
 
 
         #self.mscam = MSCAM(channels=in_channels+num_anchors, r=1)
-        self.iaff = iAFF(channels=1, r=1)
+        self.iaff = iAFF(channels=num_anchors, r=1)
         self.mscamF = MSCAM(channels=in_channels, r=1)
         self.mscamA = MSCAM(channels=num_anchors, r=1)
         self.semantic_list = nn.ModuleList()
@@ -133,23 +133,13 @@ class SAPNetMSCAM4(nn.Module):
             if feature.shape != r.shape:
                 r = F.interpolate(r, size=(feature.size(2), feature.size(3)), mode='bilinear', align_corners=True)
             rpn_logits_.append(r)
-        rpn = rpn_logits_[0]
-
-        for i in range(0, self.in_channels):
-            semantic_map = torch.zeros((feature.shape[0], 1, feature.shape[2], feature.shape[3])).cuda()
-            for j in range(0, self.num_anchors):
-            
-                semantic_map = semantic_map + self.iaff(feature[:, i:i+1, :, :], rpn[:, j:j+1, :, :]) # iAFF recurvise
-            if i == 0:
-                semantic_map_cat = semantic_map
-            else:
-                with torch.no_grad():
-                    semantic_map_cat = torch.cat((semantic_map_cat, semantic_map), dim=1)
-            if i % 10 == 0:
-                print (i)
-            
-
-        semantic_map = self.shared_semantic(semantic_map_cat)
+        rpn_feature = rpn_logits_[0]
+        # rpn_mscam_pad_channel = torch.zeros((rpn_mscam.shape[0], feature.shape[1] - rpn_mscam.shape[1], 
+        #                                      rpn_mscam.shape[2], rpn_mscam.shape[3])).cuda()
+        # rpn_mscam_padded = torch.cat((rpn_mscam, rpn_mscam_pad_channel), dim=1)
+        feature = torch.nn.MaxPool3d((68, 1, 1), stride=(68, 1, 1))(feature)
+        semantic_map = self.iaff(feature, rpn_feature) # iAFF
+        semantic_map = self.shared_semantic(semantic_map)
         feature = self.embedding(feature) # feature embedding, input is features coming from backbone
         N, C, H, W = feature.shape
 

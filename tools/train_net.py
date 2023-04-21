@@ -9,6 +9,9 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+import torch, gc
+gc.collect()
+torch.cuda.empty_cache()
 sys.path.append(os.getcwd())
 
 from detection.trainer import (

@@ -102,7 +102,7 @@ class SAPRCNN(GeneralizedRCNN):
                     masked_features = self.backbone(masked_images) 
                     mt_proposals, mt_proposal_losses, mt_rpn_logits = self.proposal_generator(mt_images, masked_features, pseudo_gt, mask_flag=True)
                     mt_proposal_losses['loss_mt_rpn_cls'] = mt_proposal_losses['loss_rpn_cls'].clone()
-                    mt_proposal_losses['loss_mt_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone()
+                    # mt_proposal_losses['loss_mt_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone() ###20230421###
                     del mt_proposal_losses['loss_rpn_cls'], mt_proposal_losses['loss_rpn_loc']
                     # _, mt_detector_losses = self.roi_heads(mt_images, masked_features, mt_proposals, pseudo_gt)
                     # mt_detector_losses['loss_mt_cls'] = mt_detector_losses['loss_cls'].clone()
