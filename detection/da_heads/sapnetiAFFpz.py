@@ -10,7 +10,7 @@ from detectron2.utils.events import get_event_storage
 from detectron2.utils import comm
 
 @DA_HEAD_REGISTRY.register()
-class SAPNetMSCAM3(nn.Module):
+class SAPNetiAFFpz(nn.Module):
 
     @configurable
     def __init__(self, *, num_anchors, in_channels, embedding_kernel_size=3,

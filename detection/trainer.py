@@ -212,7 +212,7 @@ class DATrainer(DefaultTrainer):
             loss_weight.update({'loss_target_entropy': cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT, 'loss_target_diversity': cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT})
         if cfg.MODEL.DA_HEAD.MIC_ON:
             # loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1, 'loss_mt_cls': 1, 'loss_mt_box_reg': 1})
-            loss_weight.update({'loss_mt_rpn_cls': 1})
+            loss_weight.update({'loss_mt_rpn_cls': cfg.MODEL.DA_HEAD.MIC_LOSS_WEIGHT})
             masking = Masking(
                 block_size=cfg.MODEL.DA_HEAD.MASKING_BLOCK_SIZE,
                 ratio=cfg.MODEL.DA_HEAD.MASKING_RATIO,

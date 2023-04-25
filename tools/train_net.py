@@ -58,7 +58,9 @@ def add_saprcnn_config(cfg):
     _C.MODEL.DA_HEAD.RPN_MEDM_ON = False
     _C.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT = 0.
     _C.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT = 0.
-    _C.MODEL.DA_HEAD.MIC_ON = False   #########################
+    ##########MIC############
+    _C.MODEL.DA_HEAD.MIC_ON = False   
+    _C.MODEL.DA_HEAD.MIC_LOSS_WEIGHT = 0.1
     _C.MODEL.DA_HEAD.MASKING_BLOCK_SIZE = 32
     _C.MODEL.DA_HEAD.MASKING_RATIO = 0.5
     _C.MODEL.DA_HEAD.MASK_COLOR_JITTER_S = 0.2
@@ -68,6 +70,7 @@ def add_saprcnn_config(cfg):
     _C.MODEL.DA_HEAD.PIXEL_STD = [0.229, 0.224, 0.225] 
     _C.MODEL.DA_HEAD.TEACHER_ALPHA = 0.9
     _C.MODEL.DA_HEAD.PSEUDO_LABEL_THRESHOLD =0.7
+    ##########MIC############
     _C.DATASETS.SOURCE_DOMAIN = CN()
     _C.DATASETS.SOURCE_DOMAIN.TRAIN = ()
     _C.DATASETS.TARGET_DOMAIN = CN()
