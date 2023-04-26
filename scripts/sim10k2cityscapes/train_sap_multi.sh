@@ -24,7 +24,12 @@
 #     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh "$i"
 # done
 
-for fp in $(seq 0.001 .001 1.0)
-do
-    bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh $fp
+# for fp in $(seq 0.001 .001 1.0)
+# do
+#     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh $fp
+# done
+
+for x in {100..1}; do
+     y=`bc <<< "scale=5; $x/100000"`
+     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh $y
 done
