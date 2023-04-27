@@ -101,17 +101,21 @@ class SAPRCNN(GeneralizedRCNN):
                     masked_images = masking(mt_images.tensor)
                     masked_features = self.backbone(masked_images) 
                     mt_proposals, mt_proposal_losses, mt_rpn_logits = self.proposal_generator(mt_images, masked_features, pseudo_gt, mask_flag=True)
-                    mt_proposal_losses['loss_mt_rpn_cls'] = mt_proposal_losses['loss_rpn_cls'].clone()
-                    # mt_proposal_losses['loss_mt_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone() ###20230421###
+                    mt_proposal_losses['loss_mic_rpn_cls'] = mt_proposal_losses['loss_rpn_cls'].clone()
+                    mt_proposal_losses['loss_mic_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone() 
                     del mt_proposal_losses['loss_rpn_cls'], mt_proposal_losses['loss_rpn_loc']
-                    # _, mt_detector_losses = self.roi_heads(mt_images, masked_features, mt_proposals, pseudo_gt)
-                    # mt_detector_losses['loss_mt_cls'] = mt_detector_losses['loss_cls'].clone()
-                    # mt_detector_losses['loss_mt_box_reg'] = mt_detector_losses['loss_box_reg'].clone()
-                    # del mt_detector_losses['loss_cls'], mt_detector_losses['loss_box_reg']
+                    _, mt_detector_losses = self.roi_heads(mt_images, masked_features, mt_proposals, pseudo_gt)
+                    mt_detector_losses['loss_mic_cls'] = mt_detector_losses['loss_cls'].clone()
+                    mt_detector_losses['loss_mic_box_reg'] = mt_detector_losses['loss_box_reg'].clone()
+                    del mt_detector_losses['loss_cls'], mt_detector_losses['loss_box_reg']
                     # losses.update(mt_proposal_losses)
                     # return losses
                 if pseduo_flag:
-                    t_images_output, _, _ = self.proposal_generator(t_images, t_features, None)
+                    tmp = self.inference(target_batched_inputs)
+                    # t_images_output, _, _ = self.proposal_generator(t_images, t_features, None)
+                    t_images_output = []
+                    for i in range(len(tmp)):
+                        t_images_output.append(tmp[i]['instances'])
                     return t_images_output
             _, medm_loss, t_rpn_logits = self.proposal_generator(t_images, t_features, None)
             s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances)
@@ -142,7 +146,7 @@ class SAPRCNN(GeneralizedRCNN):
                 losses.update(medm_loss)
         if pseudo_gt is not None:
             losses.update(mt_proposal_losses)
-            # losses.update(mt_detector_losses)
+            losses.update(mt_detector_losses)
         return losses
 
     def inference(

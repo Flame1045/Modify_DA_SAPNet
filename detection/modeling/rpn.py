@@ -9,6 +9,8 @@ from detectron2.modeling.matcher import Matcher
 from detectron2.config import configurable
 import torch
 from torch import nn
+from torch.nn import functional as F
+from detectron2.layers import Conv2d, ShapeSpec, cat
 
 
 @PROPOSAL_GENERATOR_REGISTRY.register()

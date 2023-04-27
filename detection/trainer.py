@@ -205,6 +205,11 @@ class DATrainer(DefaultTrainer):
 
         model = create_ddp_model(model, broadcast_buffers=False)
 
+        ####EMA####
+        model_t = self.build_model(cfg)
+        model_t = create_ddp_model(model_t, broadcast_buffers=False)
+        ####EMA####
+
         loss_weight = {'loss_cls': 1, 'loss_box_reg': 1, 'loss_rpn_cls': 1, 'loss_rpn_loc': 1,\
         'loss_sap_source_domain': cfg.MODEL.DA_HEAD.LOSS_WEIGHT, 'loss_sap_target_domain': cfg.MODEL.DA_HEAD.LOSS_WEIGHT}
 
@@ -212,7 +217,11 @@ class DATrainer(DefaultTrainer):
             loss_weight.update({'loss_target_entropy': cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT, 'loss_target_diversity': cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT})
         if cfg.MODEL.DA_HEAD.MIC_ON:
             # loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1, 'loss_mt_cls': 1, 'loss_mt_box_reg': 1})
-            loss_weight.update({'loss_mt_rpn_cls': cfg.MODEL.DA_HEAD.MIC_LOSS_WEIGHT})
+            loss_weight.update({'loss_mic_rpn_cls': cfg.MODEL.DA_HEAD.MIC_RPN_CLS_WEIGHT, 
+                                'loss_mic_rpn_loc': cfg.MODEL.DA_HEAD.MIC_RPN_LOC_WEIGHT, 
+                                'loss_mic_cls': cfg.MODEL.DA_HEAD.MIC_CLS_WEIGHT,
+                                'loss_mic_box_reg': cfg.MODEL.DA_HEAD.MIC_BOX_REG_WEIGHT,
+                                })
             masking = Masking(
                 block_size=cfg.MODEL.DA_HEAD.MASKING_BLOCK_SIZE,
                 ratio=cfg.MODEL.DA_HEAD.MASKING_RATIO,
@@ -221,7 +230,7 @@ class DATrainer(DefaultTrainer):
                 blur=cfg.MODEL.DA_HEAD.MASK_BLUR,                      
                 mean=cfg.MODEL.DA_HEAD.PIXEL_MEAN,                      
                 std=cfg.MODEL.DA_HEAD.PIXEL_STD)
-            teacher_model = EMATeacher(model, alpha=cfg.MODEL.DA_HEAD.TEACHER_ALPHA).to(model.device)
+            teacher_model = EMATeacher(model_t, alpha=cfg.MODEL.DA_HEAD.TEACHER_ALPHA).to(model_t.device)
             teacher_model.eval()
             self._trainer = (_DATrainer_MIC)(
                 model, teacher_model, masking, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg
@@ -556,13 +565,13 @@ def process_pred2label(target_output, threshold=0.7):
     output_instances = []
     for idx, bbox_l in enumerate(target_output):
         # get predict boxes
-        pred_bboxes = bbox_l._fields['proposal_boxes'].tensor.detach()
+        pred_bboxes = bbox_l._fields['pred_boxes'].tensor.detach()
         # get predict logits(which can be negative and need to be converted to probability)
-        scores = bbox_l._fields['objectness_logits'].detach()
+        scores = bbox_l._fields['scores'].detach()
         # set predict labels, only works for single class
         labels = torch.zeros(scores.shape, dtype=torch.int64).to(scores.device).detach()
         # convert logits to probability
-        scores = torch.sigmoid(scores)
+        # scores = torch.sigmoid(scores)
         # filter out low probability boxes, and its corresponding labels
         filtered_idx = scores>=threshold
         filtered_bboxes = pred_bboxes[filtered_idx]

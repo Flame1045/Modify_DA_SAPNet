@@ -29,7 +29,12 @@
 #     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh $fp
 # done
 
-for x in {100..1}; do
-     y=`bc <<< "scale=5; $x/100000"`
-     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh $y
+# for x in {100..1}; do
+#      y=`bc <<< "scale=5; $x/100000"`
+#      bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh $y
+# done
+
+for x in {1..100}; do
+     echo Number $x test
+     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh 
 done
