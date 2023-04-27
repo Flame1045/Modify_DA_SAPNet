@@ -108,6 +108,12 @@ class SAPRCNN(GeneralizedRCNN):
                     mt_detector_losses['loss_mic_cls'] = mt_detector_losses['loss_cls'].clone()
                     mt_detector_losses['loss_mic_box_reg'] = mt_detector_losses['loss_box_reg'].clone()
                     del mt_detector_losses['loss_cls'], mt_detector_losses['loss_box_reg']
+                    # mic_losses = {'mic_Loss': mt_proposal_losses['loss_mic_rpn_cls'] + \
+                    #                 mt_proposal_losses['loss_mic_rpn_loc'] + \
+                    #                 mt_detector_losses['loss_mic_cls'] + \
+                    #                 mt_detector_losses['loss_mic_box_reg']
+                    #              }
+
                     # losses.update(mt_proposal_losses)
                     # return losses
                 if pseduo_flag:
@@ -147,6 +153,7 @@ class SAPRCNN(GeneralizedRCNN):
         if pseudo_gt is not None:
             losses.update(mt_proposal_losses)
             losses.update(mt_detector_losses)
+            # losses.update(mic_losses)
         return losses
 
     def inference(

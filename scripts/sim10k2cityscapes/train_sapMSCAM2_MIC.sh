@@ -5,10 +5,10 @@ source_model_path="pretrained/sim2city-baseline-source-only/model_0033999_MAP_38
 weight_DA=0.1
 weight_entropy=0.8
 weight_diversity=0.3
-weight_MIC_RPN_CLS=0.05
-weight_MIC_RPN_LOC=0.1
-weight_MIC_CLS=0.1
-weight_MIC_BOX_REG=0.1
+weight_MIC_RPN_CLS=0.025
+weight_MIC_RPN_LOC=0.2
+weight_MIC_CLS=0.3
+weight_MIC_BOX_REG=2.3
 echo weight_MIC: ${weight_MIC}
 
 python tools/train_net.py --config-file "configs/sim10k2cityscapes/sapnetMSCAM2_R_50_C4_MIC.yaml" --num-gpus 1 \

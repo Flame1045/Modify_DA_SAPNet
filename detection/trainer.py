@@ -122,10 +122,9 @@ class _DATrainer_MIC(SimpleTrainer):
 
         loss_dict = {l: self.loss_weight[l] * loss_dict[l] for l in self.loss_weight}
         losses = sum(loss_dict.values())
-        # self.optimizer.zero_grad()
-        self._write_metrics(loss_dict, data_time)
-        torch.autograd.set_detect_anomaly(True)
+        self.optimizer.zero_grad()
         losses.backward()
+        self._write_metrics(loss_dict, data_time)
         self.optimizer.step()
 
 
@@ -222,6 +221,7 @@ class DATrainer(DefaultTrainer):
                                 'loss_mic_cls': cfg.MODEL.DA_HEAD.MIC_CLS_WEIGHT,
                                 'loss_mic_box_reg': cfg.MODEL.DA_HEAD.MIC_BOX_REG_WEIGHT,
                                 })
+            # loss_weight.update({'mic_Loss': 1})
             masking = Masking(
                 block_size=cfg.MODEL.DA_HEAD.MASKING_BLOCK_SIZE,
                 ratio=cfg.MODEL.DA_HEAD.MASKING_RATIO,
