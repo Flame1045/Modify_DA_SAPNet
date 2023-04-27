@@ -106,6 +106,7 @@ def setup(args):
     check_cfg(cfg)
     if not (args.test_images or args.visualize_attention_mask or args.gcs or args.gct or args.gco):
         default_setup(cfg, args)
+        torch.backends.cudnn.deterministic = True
     elif args.visualize_attention_mask or args.gcs or args.gct or args.gco or args.test_images:
         if args.gcs or args.gct: 
             assert args.attention_mask or args.backbone_feature, 'please determine which feature to visualize'

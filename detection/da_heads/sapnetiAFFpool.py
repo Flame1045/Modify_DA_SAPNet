@@ -137,7 +137,7 @@ class SAPNetiAFFpool(nn.Module):
         # rpn_mscam_pad_channel = torch.zeros((rpn_mscam.shape[0], feature.shape[1] - rpn_mscam.shape[1], 
         #                                      rpn_mscam.shape[2], rpn_mscam.shape[3])).cuda()
         # rpn_mscam_padded = torch.cat((rpn_mscam, rpn_mscam_pad_channel), dim=1)
-        feature = torch.nn.MaxPool3d((68, 1, 1), stride=(68, 1, 1))(feature)
+        feature = torch.nn.MaxPool3d((68, 1, 1), stride=(68, 1, 1))(feature) # channel pooling: C / 68
         semantic_map = self.iaff(feature, rpn_feature) # iAFF
         semantic_map = self.shared_semantic(semantic_map)
         feature = self.embedding(feature) # feature embedding, input is features coming from backbone
