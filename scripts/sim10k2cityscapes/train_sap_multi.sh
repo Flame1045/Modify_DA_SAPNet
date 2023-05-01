@@ -34,7 +34,7 @@
 #      bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh $y
 # done
 
-for x in {1..100}; do
+for x in {1..5}; do
      echo Number $x test
      bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh 
 done
