@@ -5,6 +5,9 @@ from .sapnetAFF import SAPNetAFF
 from .sapnetMSCAM2 import SAPNetMSCAM2
 from .sapnetiAFFpz import SAPNetiAFFpz
 from .sapnetiAFFpool import SAPNetiAFFpool
+from .sapnetiAFFadapter import SAPNetiAFFadapter
+from .sapnetiAFFadapterv2 import SAPNetiAFFadapterv2
+from .sapnetiAFFadapterv3 import SAPNetiAFFadapterv3
 from .build import build_DAHead
 from .masking import Masking
 from .teacher import EMATeacher

@@ -2,39 +2,38 @@
 # bash scripts/sim10k2cityscapes/train_sapiAFFpz.sh
 
 # echo "Training SAPNet iAFF channel max pooling"
-# bash scripts/sim10k2cityscapes/train_sapiAFFpool.sh
+# weight_MIC_RPN_CLS=$1 # 0.025
+# weight_MIC_RPN_LOC=$2 # 0.2
+# weight_MIC_CLS=$3    # 0.3
+# weight_MIC_BOX_REG=$4 # 2.3
 
-# echo "Training SAPNet MSCAM2 with MIC loss 0.1"
-# bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC01.sh
-
-# echo "Training SAPNet MSCAM2 with MIC loss 0.07"
-# bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC007.sh
-
-# echo "Training SAPNet MSCAM2 with MIC loss 0.05"
-# bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC005.sh
-
-# echo "Training SAPNet MSCAM2 with MIC loss 0.03"
-# bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC003.sh
-
-# echo "Training SAPNet MSCAM2 with MIC loss 0.01"
-# bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh
-
-# for i in {1..10}
-# do
-#     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh "$i"
+# for rc in {26..1..5}; do
+#     rcf=`bc <<< "scale=3; $rc/1000"`
+#     for rl in {21..1..5}; do
+#         rlf=`bc <<< "scale=2; $rl/100"`
+#         for c in {31..1..5}; do
+#             cf=`bc <<< "scale=2; $c/100"`
+#             for b in {22..1..7}; do
+#                 bf=`bc <<< "scale=1; $b/10"`
+#                 echo $rcf $rlf $cf $bf
+#                 bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh $rcf $rlf $cf $bf
+#             done
+#         done
+#     done
 # done
 
-# for fp in $(seq 0.001 .001 1.0)
-# do
-#     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC001.sh $fp
-# done
-
-# for x in {100..1}; do
-#      y=`bc <<< "scale=5; $x/100000"`
-#      bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh $y
-# done
 
 for x in {1..5}; do
-     echo Number $x test
-     bash scripts/sim10k2cityscapes/train_sapMSCAM2_MIC.sh 
+     echo Number $x test for v1
+     bash scripts/sim10k2cityscapes/train_sapiAFFadapter.sh 
+done
+
+for x in {1..5}; do
+     echo Number $x test for v2
+     bash scripts/sim10k2cityscapes/train_sapiAFFadapterv2.sh 
+done
+
+for x in {1..5}; do
+     echo Number $x test for v3
+     bash scripts/sim10k2cityscapes/train_sapiAFFadapterv3.sh 
 done

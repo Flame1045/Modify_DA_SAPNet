@@ -10,6 +10,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 import torch, gc
+import random
+import numpy as np
 gc.collect()
 torch.cuda.empty_cache()
 sys.path.append(os.getcwd())
@@ -52,6 +54,8 @@ def add_saprcnn_config(cfg):
     _C.MODEL.DA_HEAD.LOSS_WEIGHT = 1.0
     _C.MODEL.DA_HEAD.WINDOW_STRIDES = [2, 2, 2]
     _C.MODEL.DA_HEAD.WINDOW_SIZES = [3, 6, 9]
+    _C.MODEL.DA_HEAD.R = 1
+    _C.MODEL.DA_HEAD.ALPHA = 'ones'
     _C.MODEL.PROPOSAL_GENERATOR.NAME = "SAPRPN"
 
     _C.MODEL.DA_HEAD.NAME = 'SAPNetMSCAM'
@@ -106,6 +110,12 @@ def setup(args):
     check_cfg(cfg)
     if not (args.test_images or args.visualize_attention_mask or args.gcs or args.gct or args.gco):
         default_setup(cfg, args)
+        seed = cfg.SEED
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        np.random.seed(seed)
+        random.seed(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     elif args.visualize_attention_mask or args.gcs or args.gct or args.gco or args.test_images:

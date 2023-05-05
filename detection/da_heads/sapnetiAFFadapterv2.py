@@ -9,13 +9,24 @@ from ..layers import GradientScalarLayer
 from detectron2.utils.events import get_event_storage
 from detectron2.utils import comm
 
+class depthwise_separable_conv(nn.Module):
+ def __init__(self, nin, kernels_per_layer, nout): 
+   super(depthwise_separable_conv, self).__init__() 
+   
+  
+ def forward(self, x): 
+   out = self.depthwise(x) 
+   nn.ReLU(True)
+   out = self.pointwise(out) 
+   return out
+
 @DA_HEAD_REGISTRY.register()
-class SAPNetiAFFpool(nn.Module):
+class SAPNetiAFFadapterv2(nn.Module):
 
     @configurable
     def __init__(self, *, num_anchors, in_channels, embedding_kernel_size=3,
             embedding_norm=True, embedding_dropout=True, func_name='cross_entropy',
-            pool_type='avg', window_strides=None,
+            pool_type='avg', window_strides=None, R=1, Alpha="ones",
             window_sizes=(3, 9, 15, 21, -1)
         ):
         super().__init__()
@@ -27,6 +38,8 @@ class SAPNetiAFFpool(nn.Module):
         self.num_windows = len(window_sizes)
         self.num_anchors = num_anchors
         self.window_sizes = window_sizes
+        self.inter_channel = in_channels // R
+        self.alpha = Alpha
         if window_strides is None:
             self.window_strides = [None] * len(window_sizes)
         else:
@@ -60,7 +73,7 @@ class SAPNetiAFFpool(nn.Module):
         padding = (embedding_kernel_size - 1) // 2
         bias = not embedding_norm
         self.embedding = nn.Sequential(
-            nn.Conv2d(num_anchors, in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding, bias=bias),
+            nn.Conv2d(in_channels, in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding, bias=bias),
             NormModule(in_channels),
             nn.ReLU(True),
             DropoutModule(),
@@ -85,7 +98,20 @@ class SAPNetiAFFpool(nn.Module):
             nn.ReLU(True),
         )
 
-
+        self.adapter = nn.Sequential(
+            # Depthwise Convolution
+            nn.Conv2d(in_channels, self.inter_channel, kernel_size=embedding_kernel_size, padding=1, 
+                      groups=in_channels),
+            # Non-linear Activation
+            nn.ReLU(True),
+            # Pointwise Convolution
+            nn.Conv2d(self.inter_channel, num_anchors, kernel_size=1, groups=1),
+            )
+        
+        if self.alpha == 'ones':
+            self.scalar= nn.Parameter(torch.ones(num_anchors))
+        else:
+            assert False , "ALPHA should be ones"
 
         #self.mscam = MSCAM(channels=in_channels+num_anchors, r=1)
         self.iaff = iAFF(channels=num_anchors, r=1)
@@ -134,8 +160,9 @@ class SAPNetiAFFpool(nn.Module):
                 r = F.interpolate(r, size=(feature.size(2), feature.size(3)), mode='bilinear', align_corners=True)
             rpn_logits_.append(r)
         rpn_feature = rpn_logits_[0]
-        feature = torch.nn.MaxPool3d((68, 1, 1), stride=(68, 1, 1))(feature) # channel pooling: C / 68
-        semantic_map = self.iaff(feature, rpn_feature) # iAFF
+        feature_tobe_fuesd = self.adapter(feature)
+        feature_tobe_fuesd = feature_tobe_fuesd * self.scalar[None, :, None, None]
+        semantic_map = self.iaff(feature_tobe_fuesd, rpn_feature) # iAFF
         semantic_map = self.shared_semantic(semantic_map)
         feature = self.embedding(feature) # feature embedding, input is features coming from backbone
         N, C, H, W = feature.shape
@@ -211,6 +238,9 @@ class SAPNetiAFFpool(nn.Module):
             'pool_type': cfg.MODEL.DA_HEAD.POOL_TYPE,
             'window_strides': cfg.MODEL.DA_HEAD.WINDOW_STRIDES,
             'window_sizes': cfg.MODEL.DA_HEAD.WINDOW_SIZES,
+            'R': cfg.MODEL.DA_HEAD.R,
+            'Alpha': cfg.MODEL.DA_HEAD.ALPHA,
+
         }
 
     def spatial_attention_mask(self, feature, rpn_logits):
