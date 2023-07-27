@@ -11,6 +11,17 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from detectron2.layers import Conv2d, ShapeSpec, cat
+import random
+import numpy
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 
 @PROPOSAL_GENERATOR_REGISTRY.register()
@@ -84,6 +95,7 @@ class SAPRPN(RPN):
         features: Dict[str, torch.Tensor],
         gt_instances: Optional[List[Instances]] = None,
         mask_flag=False,
+        cfg=None,
     ):
         """
         Args:
@@ -98,6 +110,8 @@ class SAPRPN(RPN):
             proposals: list[Instances]: contains fields "proposal_boxes", "objectness_logits"
             loss: dict[Tensor] or None
         """
+        setup_seed(42)
+        # print("RPN")
         features = [features[f] for f in self.in_features]
         # generate grid anchor for each feature size, eg, FPN has five feature,
         # P2, ..., P6, then generate 3 anchors for each feature, list[Boxes[anchor number]*5], 15 in total, boxes is same l.

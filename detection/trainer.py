@@ -19,6 +19,18 @@ from .evaluation.pascal_voc import PascalVOCDetectionEvaluator_
 from .data.build import build_DA_detection_train_loader
 from .da_heads.masking import Masking
 from .da_heads.teacher import EMATeacher
+import numpy as np
+import random
+
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    np.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 class _DATrainer(SimpleTrainer):
     # one2one domain adpatation trainer
@@ -59,6 +71,7 @@ class _DATrainer(SimpleTrainer):
         t_data = next(self._target_domain_data_loader_iter)
         data_time = time.perf_counter() - start + data_time
         # test = my_preprocess_image(self=self.model, batched_inputs=t_data)
+        setup_seed(self.cfg.SEED)
         loss_dict = self.model(s_data, t_data, cfg=self.cfg)
         loss_dict = {l: self.loss_weight[l] * loss_dict[l] for l in self.loss_weight}
         losses = sum(loss_dict.values())
@@ -97,6 +110,7 @@ class _DATrainer_MIC(SimpleTrainer):
         self.model_teacher = teacher_model
         self.masking = masking
         self.iterations = 0
+        
 
     def run_step(self):
         assert self.model.training, "[_DATrainer] model was changed to eval mode!"
@@ -567,11 +581,14 @@ def process_pred2label(target_output, threshold=0.7):
         # get predict boxes
         pred_bboxes = bbox_l._fields['pred_boxes'].tensor.detach()
         # get predict logits(which can be negative and need to be converted to probability)
-        scores = bbox_l._fields['scores'].detach()
+        logits = bbox_l._fields['scores'].detach()
+        # convert logits to probability
+        Temperature = torch.max(logits).detach()
+        logits = logits / Temperature
+        scores = torch.softmax(logits, dim=0)
         # set predict labels, only works for single class
         labels = torch.zeros(scores.shape, dtype=torch.int64).to(scores.device).detach()
-        # convert logits to probability
-        # scores = torch.sigmoid(scores)
+        
         # filter out low probability boxes, and its corresponding labels
         filtered_idx = scores>=threshold
         filtered_bboxes = pred_bboxes[filtered_idx]

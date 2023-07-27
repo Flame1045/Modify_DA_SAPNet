@@ -9,6 +9,7 @@ DATASETS:
 MODEL:
   META_ARCHITECTURE: "SAPRCNN"
   BACKBONE:
+    NAME: "build_resnet_backbone_"
     FREEZE_AT: 1
   WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
   KEYPOINT_ON: False
@@ -16,6 +17,7 @@ MODEL:
   DOMAIN_ADAPTATION_ON: True
   ROI_HEADS:
     NUM_CLASSES: 1
+    NAME: "Res5ROIHeads_"
   DA_HEAD:
     NAME: "SAPNetiAFFadapterv2" # use MSCAM or iAFF
     IN_FEATURE: "res4"
@@ -27,7 +29,7 @@ MODEL:
     FUNC_NAME: "cross_entropy"
     POOL_TYPE: 'avg'
     LOSS_WEIGHT: 0.1
-    RPN_MEDM_ON: True # use MEDM Loss
+    RPN_MEDM_ON: False # use MEDM Loss
     TARGET_ENT_LOSS_WEIGHT: 0.8
     TARGET_DIV_LOSS_WEIGHT: -0.3
     # use MIC Loss #

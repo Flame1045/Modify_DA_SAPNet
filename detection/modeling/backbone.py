@@ -1,7 +1,9 @@
 '''
 Modified based on detectron2.modeling.backbone.resnet. This resnet is for grad cam.
 '''
-
+import torch
+import random
+import numpy
 import torch.nn.functional as F
 from detectron2.modeling import BACKBONE_REGISTRY
 from detectron2.modeling.backbone.resnet import (
@@ -13,6 +15,15 @@ from detectron2.modeling.backbone.resnet import (
 )
 
 __all__ = ['BottleneckBlock_', 'build_resnet_backbone_']
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 class BottleneckBlock_(BottleneckBlock):
     def forward(self, x):
@@ -32,6 +43,35 @@ class BottleneckBlock_(BottleneckBlock):
         out = out + shortcut
         out = F.relu_(out)
         return out
+
+
+class ResNet_(ResNet):
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor of shape (N,C,H,W). H, W must be a multiple of ``self.size_divisibility``.
+
+        Returns:
+            dict[str->Tensor]: names and the corresponding features
+        """
+        setup_seed(42)
+        # print("ResNet forward")
+        assert x.dim() == 4, f"ResNet takes an input of shape (N, C, H, W). Got {x.shape} instead!"
+        outputs = {}
+        x = self.stem(x)
+        if "stem" in self._out_features:
+            outputs["stem"] = x
+        for name, stage in zip(self.stage_names, self.stages):
+            x = stage(x)
+            if name in self._out_features:
+                outputs[name] = x
+        if self.num_classes is not None:
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.linear(x)
+            if "linear" in self._out_features:
+                outputs["linear"] = x
+        return outputs
 
 
 @BACKBONE_REGISTRY.register()
@@ -114,4 +154,4 @@ def build_resnet_backbone_(cfg, input_shape):
         out_channels *= 2
         bottleneck_channels *= 2
         stages.append(blocks)
-    return ResNet(stem, stages, out_features=out_features, freeze_at=freeze_at)
+    return ResNet_(stem, stages, out_features=out_features, freeze_at=freeze_at)

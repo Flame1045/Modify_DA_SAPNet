@@ -9,6 +9,7 @@ DATASETS:
 MODEL:
   META_ARCHITECTURE: "SAPRCNN"
   BACKBONE:
+    NAME: "build_resnet_backbone_"
     FREEZE_AT: 1
   WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
   KEYPOINT_ON: False
@@ -16,6 +17,7 @@ MODEL:
   DOMAIN_ADAPTATION_ON: True
   ROI_HEADS:
     NUM_CLASSES: 1
+    NAME: "Res5ROIHeads_"
   DA_HEAD:
     NAME: "SAPNet" # not use MSCAM
     IN_FEATURE: "res4"

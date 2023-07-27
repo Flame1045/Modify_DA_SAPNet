@@ -6,6 +6,17 @@ from .build import DA_HEAD_REGISTRY
 from ..layers import GradientScalarLayer
 from detectron2.utils.events import get_event_storage
 from detectron2.utils import comm
+import random
+import numpy
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 @DA_HEAD_REGISTRY.register()
 class SAPNet(nn.Module):
@@ -117,7 +128,8 @@ class SAPNet(nn.Module):
             rpn_logits: feature comes from rpn (anchors), list[tensor], [N, c, h, w] but in different size 
         Returns: dict<str, tensor>, domain loss name and loss tensor
         '''
-
+        setup_seed(42)
+        # print("SAPNET")
         feature = self.grl(feature)
         rpn_logits_ = []
         for r in rpn_logits:

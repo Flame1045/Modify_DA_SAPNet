@@ -27,7 +27,7 @@ MODEL:
     FUNC_NAME: "cross_entropy"
     POOL_TYPE: 'avg'
     LOSS_WEIGHT: 0.1
-    RPN_MEDM_ON: True # use MEDM Loss
+    RPN_MEDM_ON: False # use MEDM Loss
     TARGET_ENT_LOSS_WEIGHT: 0.8
     TARGET_DIV_LOSS_WEIGHT: -0.3
     # use MIC Loss #

@@ -22,18 +22,27 @@
 #     done
 # done
 
+# for x in {1..5}; do
+#      echo Number $x test adapterv2
+#      bash scripts/sim10k2cityscapes/train_sapiAFFadapterv2.sh 
+# done
+
+# for x in {1..5}; do
+#      echo Number $x test MSCAM
+#      bash scripts/sim10k2cityscapes/train_sapMSCAM.sh 
+# done
 
 for x in {1..5}; do
-     echo Number $x test for v1
+     echo Number $x test adapterv1
      bash scripts/sim10k2cityscapes/train_sapiAFFadapter.sh 
 done
 
 for x in {1..5}; do
-     echo Number $x test for v2
-     bash scripts/sim10k2cityscapes/train_sapiAFFadapterv2.sh 
+     echo Number $x test adapterv3
+     bash scripts/sim10k2cityscapes/train_sapiAFFadapterv3.sh 
 done
 
 for x in {1..5}; do
-     echo Number $x test for v3
-     bash scripts/sim10k2cityscapes/train_sapiAFFadapterv3.sh 
+     echo Number $x test baseline
+     bash scripts/sim10k2cityscapes/train_sap.sh 
 done

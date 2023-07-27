@@ -10,7 +10,17 @@ from detectron2.utils.events import get_event_storage
 from ..da_heads import build_DAHead
 from ..da_heads import Masking
 from ..da_heads import EMATeacher
+import random
+import numpy
 
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 @META_ARCH_REGISTRY.register()
 class SAPRCNN(GeneralizedRCNN):
@@ -75,9 +85,8 @@ class SAPRCNN(GeneralizedRCNN):
                 The :class:`Instances` object has the following keys:
                 "pred_boxes", "pred_classes", "scores", "pred_masks", "pred_keypoints"
         """
-        # masking image 
-        # if masking is not None:
-        #     return self.preprocess_image(target_batched_inputs).tensor                  
+        setup_seed(42)  
+        # print("META ARCH")          
         if not self.training and pseduo_flag is False:
             return self.inference(source_batched_inputs)
         # source domain input
@@ -100,7 +109,7 @@ class SAPRCNN(GeneralizedRCNN):
                     mt_images = self.preprocess_image(mt_batched_inputs)
                     masked_images = masking(mt_images.tensor)
                     masked_features = self.backbone(masked_images) 
-                    mt_proposals, mt_proposal_losses, mt_rpn_logits = self.proposal_generator(mt_images, masked_features, pseudo_gt, mask_flag=True)
+                    mt_proposals, mt_proposal_losses, mt_rpn_logits = self.proposal_generator(mt_images, masked_features, pseudo_gt, mask_flag=True, cfg=cfg)
                     mt_proposal_losses['loss_mic_rpn_cls'] = mt_proposal_losses['loss_rpn_cls'].clone()
                     mt_proposal_losses['loss_mic_rpn_loc'] = mt_proposal_losses['loss_rpn_loc'].clone() 
                     del mt_proposal_losses['loss_rpn_cls'], mt_proposal_losses['loss_rpn_loc']
@@ -123,13 +132,13 @@ class SAPRCNN(GeneralizedRCNN):
                     for i in range(len(tmp)):
                         t_images_output.append(tmp[i]['instances'])
                     return t_images_output
-            _, medm_loss, t_rpn_logits = self.proposal_generator(t_images, t_features, None)
-            s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances)
+            _, medm_loss, t_rpn_logits = self.proposal_generator(t_images, t_features, cfg=cfg)
+            s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances, cfg=cfg)
             da_source_loss = self.da_heads(s_features[self.in_feature_da_heads], s_rpn_logits, 'source')
             da_target_loss = self.da_heads(t_features[self.in_feature_da_heads], t_rpn_logits, 'target')
         else:
             if self.proposal_generator is not None:
-                s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances)
+                s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances, cfg=cfg)
             else:
                 assert "proposals" in source_batched_inputs[0]
                 s_proposals = [x["proposals"].to(self.device) for x in source_batched_inputs]
@@ -178,7 +187,8 @@ class SAPRCNN(GeneralizedRCNN):
             Otherwise, a list[Instances] containing raw network outputs.
         """
         assert not self.training
-
+        setup_seed(42)
+        # print("META ARCH")
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
 

@@ -10,17 +10,58 @@ import torch
 from torch import nn
 from typing import List, Tuple
 from detectron2.modeling.roi_heads import Res5ROIHeads, build_mask_head, FastRCNNOutputLayers, ROI_HEADS_REGISTRY
-
 from detectron2.modeling.poolers import ROIPooler
 from detectron2.layers import ShapeSpec, batched_nms
-from detectron2.structures import Boxes, Instances
+from detectron2.structures import Boxes, Instances, pairwise_iou, ImageList
 from detectron2.modeling.backbone.resnet import ResNet
-
+from typing import Dict, Optional
 from .backbone import BottleneckBlock_
+import random
+import numpy
 
 __all__ = ['Res5ROIHeads_',]
 
 logger = logging.getLogger(__name__)
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
+
+def select_foreground_proposals(
+    proposals: List[Instances], bg_label: int
+) -> Tuple[List[Instances], List[torch.Tensor]]:
+    """
+    Given a list of N Instances (for N images), each containing a `gt_classes` field,
+    return a list of Instances that contain only instances with `gt_classes != -1 &&
+    gt_classes != bg_label`.
+
+    Args:
+        proposals (list[Instances]): A list of N Instances, where N is the number of
+            images in the batch.
+        bg_label: label index of background class.
+
+    Returns:
+        list[Instances]: N Instances, each contains only the selected foreground instances.
+        list[Tensor]: N boolean vector, correspond to the selection mask of
+            each Instances object. True for selected instances.
+    """
+    assert isinstance(proposals, (list, tuple))
+    assert isinstance(proposals[0], Instances)
+    assert proposals[0].has("gt_classes")
+    fg_proposals = []
+    fg_selection_masks = []
+    for proposals_per_image in proposals:
+        gt_classes = proposals_per_image.gt_classes
+        fg_selection_mask = (gt_classes != -1) & (gt_classes != bg_label)
+        fg_idxs = fg_selection_mask.nonzero().squeeze(1)
+        fg_proposals.append(proposals_per_image[fg_idxs])
+        fg_selection_masks.append(fg_selection_mask)
+    return fg_proposals, fg_selection_masks
 
 @ROI_HEADS_REGISTRY.register()
 class Res5ROIHeads_(Res5ROIHeads):
@@ -93,6 +134,76 @@ class Res5ROIHeads_(Res5ROIHeads):
             stride_in_1x1=stride_in_1x1,
         )
         return nn.Sequential(*blocks), out_channels
+    def forward(
+        self,
+        images: ImageList,
+        features: Dict[str, torch.Tensor],
+        proposals: List[Instances],
+        targets: Optional[List[Instances]] = None,
+    ):
+        """
+        See :meth:`ROIHeads.forward`.
+        """
+        setup_seed(42)
+        # print("ROI")
+        del images
+
+        if self.training:
+            assert targets
+            proposals = self.label_and_sample_proposals(proposals, targets)
+        del targets
+
+        proposal_boxes = [x.proposal_boxes for x in proposals]
+        box_features = self._shared_roi_transform(
+            [features[f] for f in self.in_features], proposal_boxes
+        )
+        predictions = self.box_predictor(box_features.mean(dim=[2, 3]))
+
+        if self.training:
+            del features
+            losses = self.box_predictor.losses(predictions, proposals)
+            if self.mask_on:
+                proposals, fg_selection_masks = select_foreground_proposals(
+                    proposals, self.num_classes
+                )
+                # Since the ROI feature transform is shared between boxes and masks,
+                # we don't need to recompute features. The mask loss is only defined
+                # on foreground proposals, so we need to select out the foreground
+                # features.
+                mask_features = box_features[torch.cat(fg_selection_masks, dim=0)]
+                del box_features
+                losses.update(self.mask_head(mask_features, proposals))
+            return [], losses
+        else:
+            pred_instances, _ = self.box_predictor.inference(predictions, proposals)
+            pred_instances = self.forward_with_given_boxes(features, pred_instances)
+            return pred_instances, {}
+
+    def forward_with_given_boxes(
+        self, features: Dict[str, torch.Tensor], instances: List[Instances]
+    ) -> List[Instances]:
+        """
+        Use the given boxes in `instances` to produce other (non-box) per-ROI outputs.
+
+        Args:
+            features: same as in `forward()`
+            instances (list[Instances]): instances to predict other outputs. Expect the keys
+                "pred_boxes" and "pred_classes" to exist.
+
+        Returns:
+            instances (Instances):
+                the same `Instances` object, with extra
+                fields such as `pred_masks` or `pred_keypoints`.
+        """
+        assert not self.training
+        assert instances[0].has("pred_boxes") and instances[0].has("pred_classes")
+
+        if self.mask_on:
+            feature_list = [features[f] for f in self.in_features]
+            x = self._shared_roi_transform(feature_list, [x.pred_boxes for x in instances])
+            return self.mask_head(x, instances)
+        else:
+            return instances
 
 class FastRCNNOutputLayers_(FastRCNNOutputLayers):
     def inference(self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]):

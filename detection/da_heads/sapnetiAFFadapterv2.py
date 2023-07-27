@@ -8,17 +8,17 @@ from .iAFF import iAFF
 from ..layers import GradientScalarLayer
 from detectron2.utils.events import get_event_storage
 from detectron2.utils import comm
+import random
+import numpy
 
-class depthwise_separable_conv(nn.Module):
- def __init__(self, nin, kernels_per_layer, nout): 
-   super(depthwise_separable_conv, self).__init__() 
-   
-  
- def forward(self, x): 
-   out = self.depthwise(x) 
-   nn.ReLU(True)
-   out = self.pointwise(out) 
-   return out
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 @DA_HEAD_REGISTRY.register()
 class SAPNetiAFFadapterv2(nn.Module):
@@ -102,10 +102,13 @@ class SAPNetiAFFadapterv2(nn.Module):
             # Depthwise Convolution
             nn.Conv2d(in_channels, self.inter_channel, kernel_size=embedding_kernel_size, padding=1, 
                       groups=in_channels),
+            NormModule(self.inter_channel),
             # Non-linear Activation
             nn.ReLU(True),
+            DropoutModule(),
             # Pointwise Convolution
             nn.Conv2d(self.inter_channel, num_anchors, kernel_size=1, groups=1),
+            NormModule(num_anchors),
             )
         
         if self.alpha == 'ones':
@@ -151,7 +154,7 @@ class SAPNetiAFFadapterv2(nn.Module):
             rpn_logits: feature comes from rpn (anchors), list[tensor], [N, c, h, w] but in different size 
         Returns: dict<str, tensor>, domain loss name and loss tensor
         '''
-
+        setup_seed(42)
         feature = self.grl(feature)
         rpn_logits_ = []
         for r in rpn_logits:
