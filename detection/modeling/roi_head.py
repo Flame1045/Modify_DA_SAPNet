@@ -8,10 +8,11 @@ import inspect
 import logging
 import torch
 from torch import nn
+from torch.nn import functional as F
 from typing import List, Tuple
 from detectron2.modeling.roi_heads import Res5ROIHeads, build_mask_head, FastRCNNOutputLayers, ROI_HEADS_REGISTRY
 from detectron2.modeling.poolers import ROIPooler
-from detectron2.layers import ShapeSpec, batched_nms
+from detectron2.layers import ShapeSpec, batched_nms, cat
 from detectron2.structures import Boxes, Instances, pairwise_iou, ImageList
 from detectron2.modeling.backbone.resnet import ResNet
 from typing import Dict, Optional
@@ -140,6 +141,7 @@ class Res5ROIHeads_(Res5ROIHeads):
         features: Dict[str, torch.Tensor],
         proposals: List[Instances],
         targets: Optional[List[Instances]] = None,
+        is_pseudo = False
     ):
         """
         See :meth:`ROIHeads.forward`.
@@ -175,7 +177,10 @@ class Res5ROIHeads_(Res5ROIHeads):
                 losses.update(self.mask_head(mask_features, proposals))
             return [], losses
         else:
-            pred_instances, _ = self.box_predictor.inference(predictions, proposals)
+            if is_pseudo:
+                pred_instances, _ = self.box_predictor.inference(predictions, proposals, is_pseudo=True)
+            else:
+                pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
 
@@ -206,7 +211,7 @@ class Res5ROIHeads_(Res5ROIHeads):
             return instances
 
 class FastRCNNOutputLayers_(FastRCNNOutputLayers):
-    def inference(self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]):
+    def inference(self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances], is_pseudo=False):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -216,8 +221,12 @@ class FastRCNNOutputLayers_(FastRCNNOutputLayers):
             list[Instances]: same as `fast_rcnn_inference`.
             list[Tensor]: same as `fast_rcnn_inference`.
         """
-        boxes = self.predict_boxes(predictions, proposals)
-        scores = self.predict_probs(predictions, proposals)
+        if is_pseudo:
+            boxes = self.predict_boxes_(predictions, proposals)
+            scores = self.predict_probs_(predictions, proposals, is_pseudo=True)
+        else:
+            boxes = self.predict_boxes_(predictions, proposals)
+            scores = self.predict_probs_(predictions, proposals)
         image_shapes = [x.image_size for x in proposals]
         return fast_rcnn_inference(
             boxes,
@@ -227,6 +236,53 @@ class FastRCNNOutputLayers_(FastRCNNOutputLayers):
             self.test_nms_thresh,
             self.test_topk_per_image,
         )
+    def predict_boxes_(
+        self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances], is_pseudo=False
+    ):
+        """
+        Args:
+            predictions: return values of :meth:`forward()`.
+            proposals (list[Instances]): proposals that match the features that were
+                used to compute predictions. The ``proposal_boxes`` field is expected.
+
+        Returns:
+            list[Tensor]:
+                A list of Tensors of predicted class-specific or class-agnostic boxes
+                for each image. Element i has shape (Ri, K * B) or (Ri, B), where Ri is
+                the number of proposals for image i and B is the box dimension (4 or 5)
+        """
+        if not len(proposals):
+            return []
+        _, proposal_deltas = predictions
+        num_prop_per_image = [len(p) for p in proposals]
+        proposal_boxes = cat([p.proposal_boxes.tensor for p in proposals], dim=0)
+        predict_boxes = self.box2box_transform.apply_deltas(
+            proposal_deltas,
+            proposal_boxes,
+        )  # Nx(KxB)
+        return predict_boxes.split(num_prop_per_image)
+
+    def predict_probs_(
+        self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances], is_pseudo=False
+    ):
+        """
+        Args:
+            predictions: return values of :meth:`forward()`.
+            proposals (list[Instances]): proposals that match the features that were
+                used to compute predictions.
+
+        Returns:
+            list[Tensor]:
+                A list of Tensors of predicted class probabilities for each image.
+                Element i has shape (Ri, K + 1), where Ri is the number of proposals for image i.
+        """
+        scores, _ = predictions
+        num_inst_per_image = [len(p) for p in proposals]
+        if is_pseudo:
+            Temperature = torch.max(scores).detach()
+            scores = scores / Temperature
+        probs = F.softmax(scores, dim=-1)
+        return probs.split(num_inst_per_image, dim=0)
 
 
 def fast_rcnn_inference(

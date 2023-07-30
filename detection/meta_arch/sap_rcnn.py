@@ -126,11 +126,12 @@ class SAPRCNN(GeneralizedRCNN):
                     # losses.update(mt_proposal_losses)
                     # return losses
                 if pseduo_flag:
-                    tmp = self.inference(target_batched_inputs)
+                    t_images_output = self.inference(target_batched_inputs, do_postprocess = False, is_pseudo=True)
+                    # tmp1, logits1 = self.inference(target_batched_inputs)
                     # t_images_output, _, _ = self.proposal_generator(t_images, t_features, None)
-                    t_images_output = []
-                    for i in range(len(tmp)):
-                        t_images_output.append(tmp[i]['instances'])
+                    # t_images_output = []
+                    # for i in range(len(tmp)):
+                    #     t_images_output.append(tmp[i]['instances'])
                     return t_images_output
             _, medm_loss, t_rpn_logits = self.proposal_generator(t_images, t_features, cfg=cfg)
             s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances, cfg=cfg)
@@ -170,6 +171,7 @@ class SAPRCNN(GeneralizedRCNN):
         batched_inputs: List[Dict[str, torch.Tensor]],
         detected_instances: Optional[List[Instances]] = None,
         do_postprocess: bool = True,
+        is_pseudo = False
     ):
         """
         Run inference on the given inputs.
@@ -195,12 +197,14 @@ class SAPRCNN(GeneralizedRCNN):
 
         if detected_instances is None:
             if self.proposal_generator is not None:
-                proposals, _, _ = self.proposal_generator(images, features, None)
+                proposals, _1, _2 = self.proposal_generator(images, features, None)
             else:
                 assert "proposals" in batched_inputs[0]
                 proposals = [x["proposals"].to(self.device) for x in batched_inputs]
-
-            results, _ = self.roi_heads(images, features, proposals, None)
+            if is_pseudo:
+                results, _3 = self.roi_heads(images, features, proposals, None, is_pseudo=True)
+            else:
+                results, _3 = self.roi_heads(images, features, proposals, None)
         else:
             detected_instances = [x.to(self.device) for x in detected_instances]
             results = self.roi_heads.forward_with_given_boxes(features, detected_instances)

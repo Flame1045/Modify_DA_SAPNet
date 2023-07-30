@@ -55,10 +55,14 @@ class PascalVOCDetectionEvaluator_(PascalVOCDetectionEvaluator):
         # '-' in key will not show in logging
         ret["AP50_for_class"] = dict(zip(list(map(lambda x: x.replace('-', '_'), self._class_names)), aps[50]))
         ret["bbox"] = {"AP": np.mean(list(mAP.values())), "AP50": mAP[50], "AP75": mAP[75]}
-        ap50 = ret['AP50_for_class']['car']
-        if ap50 < 30.0:
-            self._logger.info(
-            "Last AP50 for car is {}".format(ap50)
-            )
-            assert False, 'AP50 for some class is less than 10.0'
+        for key, value in ret['AP50_for_class'].items():
+            from datetime import datetime
+            save = './ap50_score/ap50-{}---{}---{}'.format(datetime.now().strftime("%y-%m-%d_%H-%M-%S"), key, value)
+            with open(save, "w+") as f:
+                f.write(f"AP50 for {key} is {value}\n")
+            if value < 10.0:
+                self._logger.info(
+                f"Last AP50 for {key} is {value}"
+                )
+                assert False, 'AP50 for some class is less than threshold'
         return ret

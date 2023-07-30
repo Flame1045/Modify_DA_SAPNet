@@ -203,7 +203,7 @@ class DATrainer(DefaultTrainer):
         """
         Args:
             cfg (CfgNode):
-        """
+        """       
         super(DefaultTrainer, self).__init__()
         logger = logging.getLogger("detectron2")
         if not logger.isEnabledFor(logging.INFO):  # setup_logger is not called for d2
@@ -580,12 +580,8 @@ def process_pred2label(target_output, threshold=0.7):
     for idx, bbox_l in enumerate(target_output):
         # get predict boxes
         pred_bboxes = bbox_l._fields['pred_boxes'].tensor.detach()
-        # get predict logits(which can be negative and need to be converted to probability)
-        logits = bbox_l._fields['scores'].detach()
-        # convert logits to probability
-        Temperature = torch.max(logits).detach()
-        logits = logits / Temperature
-        scores = torch.softmax(logits, dim=0)
+        # get predict logits(which can be negative and need to be converted to probability))
+        scores = bbox_l._fields['scores'].detach()
         # set predict labels, only works for single class
         labels = torch.zeros(scores.shape, dtype=torch.int64).to(scores.device).detach()
         
