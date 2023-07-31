@@ -110,6 +110,7 @@ class _DATrainer_MIC(SimpleTrainer):
         self.model_teacher = teacher_model
         self.masking = masking
         self.iterations = 0
+        self.gather_metric_period = 1
         
 
     def run_step(self):

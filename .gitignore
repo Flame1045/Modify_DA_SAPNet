@@ -8,6 +8,7 @@ outputs
 pretrained
 test_images
 .vscode
+ap50_score/
 detection/__pycache__/
 detection/da_heads/__pycache__/
 detection/data/__pycache__/
