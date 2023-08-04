@@ -18,7 +18,7 @@ MODEL:
   ROI_HEADS:
     NUM_CLASSES: 1
   DA_HEAD:
-    NAME: "SAPNetMSCAM2" # use MSCAM or iAFF
+    NAME: "SAPNet" # use MSCAM or iAFF
     IN_FEATURE: "res4"
     IN_CHANNELS: 1024
     NUM_ANCHOR_IN_IMG: 15
@@ -28,7 +28,8 @@ MODEL:
     FUNC_NAME: "cross_entropy"
     POOL_TYPE: 'avg'
     LOSS_WEIGHT: 0.1
-    RPN_MEDM_ON: True # use MEDM Loss
+    # use MEDM Loss
+    RPN_MEDM_ON: True 
     TARGET_ENT_LOSS_WEIGHT: 0.8
     TARGET_DIV_LOSS_WEIGHT: -0.3
     # use MIC Loss #
@@ -46,7 +47,6 @@ MODEL:
     PIXEL_STD: [0.229, 0.224, 0.225]
     TEACHER_ALPHA: 0.9
     PSEUDO_LABEL_THRESHOLD: 0.8  
-    # use MIC Loss #
     WINDOW_STRIDES: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
     WINDOW_SIZES: [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 35, 37]
   PROPOSAL_GENERATOR:

@@ -54,7 +54,7 @@ class ResNet_(ResNet):
         Returns:
             dict[str->Tensor]: names and the corresponding features
         """
-        setup_seed(42)
+
         # print("ResNet forward")
         assert x.dim() == 4, f"ResNet takes an input of shape (N, C, H, W). Got {x.shape} instead!"
         outputs = {}
@@ -81,6 +81,10 @@ def build_resnet_backbone_(cfg, input_shape):
     Returns:
         ResNet: a :class:`ResNet` instance.
     """
+
+    setup_seed(cfg.SEED)
+    print("backbone build_resnet_backbone_ seeding")
+
     # need registration of new blocks/stems?
     norm = cfg.MODEL.RESNETS.NORM
     stem = BasicStem(

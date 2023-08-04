@@ -128,7 +128,7 @@ class SAPNet(nn.Module):
             rpn_logits: feature comes from rpn (anchors), list[tensor], [N, c, h, w] but in different size 
         Returns: dict<str, tensor>, domain loss name and loss tensor
         '''
-        setup_seed(42)
+        # setup_seed(42)
         # print("SAPNET")
         feature = self.grl(feature)
         rpn_logits_ = []
@@ -204,6 +204,8 @@ class SAPNet(nn.Module):
 
     @classmethod
     def from_config(cls, cfg):
+        setup_seed(cfg.SEED)
+        print("sapnetMSCAM2 SAPNetMSCAM2 from_config seeding")
         return {
             'num_anchors': cfg.MODEL.DA_HEAD.NUM_ANCHOR_IN_IMG,
             'in_channels': cfg.MODEL.DA_HEAD.IN_CHANNELS,

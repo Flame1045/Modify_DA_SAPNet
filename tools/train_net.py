@@ -12,6 +12,7 @@ from pathlib import Path
 import torch, gc
 import random
 import numpy as np
+ 
 gc.collect()
 torch.cuda.empty_cache()
 sys.path.append(os.getcwd())
@@ -91,6 +92,15 @@ def check_cfg(cfg):
     if cfg.MODEL.DA_HEAD.RPN_MEDM_ON:
         assert cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT > 0, 'MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT must be greater than 0'
         assert cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT < 0, 'MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT must be smaller than 0'
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    np.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
     
 
 def setup(args):
@@ -110,14 +120,6 @@ def setup(args):
     check_cfg(cfg)
     if not (args.test_images or args.visualize_attention_mask or args.gcs or args.gct or args.gco):
         default_setup(cfg, args)
-        seed = cfg.SEED
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
     elif args.visualize_attention_mask or args.gcs or args.gct or args.gco or args.test_images:
         if args.gcs or args.gct: 
             assert args.attention_mask or args.backbone_feature, 'please determine which feature to visualize'
@@ -268,6 +270,8 @@ def grad_cam_object_detection(cfg):
 
 def main(args):
     cfg = setup(args)
+    setup_seed(cfg.SEED)
+    print("train_net main seeding")
 
     if args.eval_only:
         model = DATrainer.build_model(cfg)
@@ -349,7 +353,7 @@ if __name__ == "__main__":
     parser.add_argument("--grad-cam-object-detection", dest='gco', action="store_true", help="visualize grad cam of object detector,  output directory is under test_images")
     args = parser.parse_args()
     print("Command Line Args:", args)
-
+    
     launch(
         main,
         args.num_gpus,

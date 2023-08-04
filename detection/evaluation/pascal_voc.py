@@ -57,7 +57,7 @@ class PascalVOCDetectionEvaluator_(PascalVOCDetectionEvaluator):
         ret["bbox"] = {"AP": np.mean(list(mAP.values())), "AP50": mAP[50], "AP75": mAP[75]}
         for key, value in ret['AP50_for_class'].items():
             from datetime import datetime
-            save = './ap50_score/ap50-{}---{}---{}'.format(datetime.now().strftime("%y-%m-%d_%H-%M-%S"), key, value)
+            save = './ap50_score/{}---ap50-{}---{}'.format(value, datetime.now().strftime("%y-%m-%d_%H-%M-%S"), key)
             with open(save, "w+") as f:
                 f.write(f"AP50 for {key} is {value}\n")
             if value < 10.0:

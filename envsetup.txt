@@ -1,6 +1,6 @@
-conda create -n pytorch110-cuda113 python==3.8.11 -y
+conda create -n DA python==3.8.11 -y
 
-conda activate pytorch110-cuda113
+conda activate DA
 
 conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge -y
 
@@ -12,15 +12,17 @@ conda install -c conda-forge einops -y
 
 conda install -c conda-forge timm -y
 
-pip install opencv-python
+pip install opencv-python # conda install -c conda-forge opencv -y
 
-pip install pycocotools
+pip install pycocotools # conda install -c conda-forge pycocotools -y
 
 conda install -c conda-forge tensorboard -y
 
-pip install setuptools==59.5.0
+pip install setuptools==59.5.0 
 
-pip3 install numpy==1.23.5
+pip3 install numpy==1.23.5 
+
+pip install -U Werkzeug
 
 # conda deactivate
 
@@ -32,4 +34,4 @@ pip3 install numpy==1.23.5
 
 # conda deactivate
 
-# conda activate pytorch110-cuda113 # Start training 
+# conda activate DA # Start training 

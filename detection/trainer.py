@@ -50,6 +50,8 @@ class _DATrainer(SimpleTrainer):
         If you want your model (or a submodule of it) to behave
         like evaluation during training, you can overwrite its train() method.
         """
+        setup_seed(cfg.SEED)
+        print("_DATrainer __init__ seeding")
         model.train()
         self.model = model
         self.source_domain_data_loader = source_domain_data_loader
@@ -71,7 +73,6 @@ class _DATrainer(SimpleTrainer):
         t_data = next(self._target_domain_data_loader_iter)
         data_time = time.perf_counter() - start + data_time
         # test = my_preprocess_image(self=self.model, batched_inputs=t_data)
-        setup_seed(self.cfg.SEED)
         loss_dict = self.model(s_data, t_data, cfg=self.cfg)
         loss_dict = {l: self.loss_weight[l] * loss_dict[l] for l in self.loss_weight}
         losses = sum(loss_dict.values())
@@ -98,6 +99,8 @@ class _DATrainer_MIC(SimpleTrainer):
         If you want your model (or a submodule of it) to behave
         like evaluation during training, you can overwrite its train() method.
         """
+        setup_seed(cfg.SEED)
+        print("trainer _DATrainer_MIC __init__ seeding")
         model.train()
         self.model = model
         self.source_domain_data_loader = source_domain_data_loader
@@ -110,10 +113,11 @@ class _DATrainer_MIC(SimpleTrainer):
         self.model_teacher = teacher_model
         self.masking = masking
         self.iterations = 0
-        self.gather_metric_period = 1
         
 
     def run_step(self):
+        # setup_seed(self.cfg.SEED)
+        # print("trainer _DATrainer_MIC run_step seeding")
         assert self.model.training, "[_DATrainer] model was changed to eval mode!"
 
         start = time.perf_counter()
@@ -205,12 +209,15 @@ class DATrainer(DefaultTrainer):
         Args:
             cfg (CfgNode):
         """       
+
+        setup_seed(cfg.SEED)
+        print("trainer DATrainer __init__ seeding")  
+
         super(DefaultTrainer, self).__init__()
         logger = logging.getLogger("detectron2")
         if not logger.isEnabledFor(logging.INFO):  # setup_logger is not called for d2
             setup_logger()
         cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
-
         # Assume these objects must be constructed in this order.
         model = self.build_model(cfg)
         optimizer = self.build_optimizer(cfg, model)
@@ -218,18 +225,16 @@ class DATrainer(DefaultTrainer):
         target_domain_data_loader = self.build_train_loader(cfg, 'target')
 
         model = create_ddp_model(model, broadcast_buffers=False)
-
-        ####EMA####
-        model_t = self.build_model(cfg)
-        model_t = create_ddp_model(model_t, broadcast_buffers=False)
-        ####EMA####
-
         loss_weight = {'loss_cls': 1, 'loss_box_reg': 1, 'loss_rpn_cls': 1, 'loss_rpn_loc': 1,\
         'loss_sap_source_domain': cfg.MODEL.DA_HEAD.LOSS_WEIGHT, 'loss_sap_target_domain': cfg.MODEL.DA_HEAD.LOSS_WEIGHT}
 
         if cfg.MODEL.DA_HEAD.RPN_MEDM_ON:
             loss_weight.update({'loss_target_entropy': cfg.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT, 'loss_target_diversity': cfg.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT})
         if cfg.MODEL.DA_HEAD.MIC_ON:
+            # EMA model teacher
+            model_t = self.build_model(cfg)
+            model_t = create_ddp_model(model_t, broadcast_buffers=False)
+
             # loss_weight.update({'loss_mt_rpn_cls': 1, 'loss_mt_rpn_loc': 1, 'loss_mt_cls': 1, 'loss_mt_box_reg': 1})
             loss_weight.update({'loss_mic_rpn_cls': cfg.MODEL.DA_HEAD.MIC_RPN_CLS_WEIGHT, 
                                 'loss_mic_rpn_loc': cfg.MODEL.DA_HEAD.MIC_RPN_LOC_WEIGHT, 
@@ -585,7 +590,6 @@ def process_pred2label(target_output, threshold=0.7):
         scores = bbox_l._fields['scores'].detach()
         # set predict labels, only works for single class
         labels = torch.zeros(scores.shape, dtype=torch.int64).to(scores.device).detach()
-        
         # filter out low probability boxes, and its corresponding labels
         filtered_idx = scores>=threshold
         filtered_bboxes = pred_bboxes[filtered_idx]

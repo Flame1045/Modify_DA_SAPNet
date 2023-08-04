@@ -69,6 +69,10 @@ class Res5ROIHeads_(Res5ROIHeads):
 
     @classmethod
     def from_config(cls, cfg, input_shape):
+
+        setup_seed(cfg.SEED)
+        print("roi_head ResROIHeads_ from_config seeding")
+
         # fmt: off
         ret = super(Res5ROIHeads, cls).from_config(cfg)
         in_features = ret["in_features"] = cfg.MODEL.ROI_HEADS.IN_FEATURES
@@ -146,7 +150,7 @@ class Res5ROIHeads_(Res5ROIHeads):
         """
         See :meth:`ROIHeads.forward`.
         """
-        setup_seed(42)
+
         # print("ROI")
         del images
 
@@ -223,7 +227,7 @@ class FastRCNNOutputLayers_(FastRCNNOutputLayers):
         """
         if is_pseudo:
             boxes = self.predict_boxes_(predictions, proposals)
-            scores = self.predict_probs_(predictions, proposals, is_pseudo=True)
+            scores = self.predict_probs_(predictions, proposals, is_pseudo=True)  ###MIC
         else:
             boxes = self.predict_boxes_(predictions, proposals)
             scores = self.predict_probs_(predictions, proposals)

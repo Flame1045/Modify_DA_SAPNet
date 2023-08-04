@@ -7,6 +7,17 @@ from .mscam import MSCAM
 from ..layers import GradientScalarLayer
 from detectron2.utils.events import get_event_storage
 from detectron2.utils import comm
+import numpy
+import random
+
+def setup_seed(seed):
+    random.seed(seed)                          
+    numpy.random.seed(seed)                       
+    torch.manual_seed(seed)                    
+    torch.cuda.manual_seed(seed)               
+    torch.cuda.manual_seed_all(seed)           
+    torch.backends.cudnn.deterministic = True 
+    torch.backends.cudnn.benchmark = False
 
 @DA_HEAD_REGISTRY.register()
 class SAPNetMSCAM2(nn.Module):
@@ -123,6 +134,8 @@ class SAPNetMSCAM2(nn.Module):
             rpn_logits: feature comes from rpn (anchors), list[tensor], [N, c, h, w] but in different size 
         Returns: dict<str, tensor>, domain loss name and loss tensor
         '''
+        # setup_seed(cfg.SEED)
+        # print("sapnetMSCAM2 SAPNetMSCAM2 forward seeding")
 
         feature = self.grl(feature)
         rpn_logits_ = []
@@ -201,6 +214,8 @@ class SAPNetMSCAM2(nn.Module):
 
     @classmethod
     def from_config(cls, cfg):
+        setup_seed(cfg.SEED)
+        print("sapnetMSCAM2 SAPNetMSCAM2 from_config seeding")
         return {
             'num_anchors': cfg.MODEL.DA_HEAD.NUM_ANCHOR_IN_IMG,
             'in_channels': cfg.MODEL.DA_HEAD.IN_CHANNELS,

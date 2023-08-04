@@ -61,6 +61,10 @@ class SAPRPN(RPN):
 
     @classmethod
     def from_config(cls, cfg, input_shape: Dict[str, ShapeSpec]):
+
+        setup_seed(cfg.SEED)
+        print("rpn SAPRPN from_config seeding")
+
         in_features = cfg.MODEL.RPN.IN_FEATURES
         ret = {
             "in_features": in_features,
@@ -110,7 +114,7 @@ class SAPRPN(RPN):
             proposals: list[Instances]: contains fields "proposal_boxes", "objectness_logits"
             loss: dict[Tensor] or None
         """
-        setup_seed(42)
+
         # print("RPN")
         features = [features[f] for f in self.in_features]
         # generate grid anchor for each feature size, eg, FPN has five feature,

@@ -13,6 +13,7 @@ from ..da_heads import EMATeacher
 import random
 import numpy
 
+
 def setup_seed(seed):
     random.seed(seed)                          
     numpy.random.seed(seed)                       
@@ -46,6 +47,8 @@ class SAPRCNN(GeneralizedRCNN):
 
     @classmethod
     def from_config(cls, cfg):
+        setup_seed(cfg.SEED) 
+        print("sap_rcnn SAPRCNN from_config seeding")  
         backbone = build_backbone(cfg)
         if cfg.MODEL.DOMAIN_ADAPTATION_ON:
             da_haeds = build_DAHead(cfg)
@@ -85,10 +88,10 @@ class SAPRCNN(GeneralizedRCNN):
                 The :class:`Instances` object has the following keys:
                 "pred_boxes", "pred_classes", "scores", "pred_masks", "pred_keypoints"
         """
-        setup_seed(42)  
-        # print("META ARCH")          
+        # setup_seed(cfg.SEED) 
+        # print("sap_rcnn SAPRCNN forward seeding")          
         if not self.training and pseduo_flag is False:
-            return self.inference(source_batched_inputs)
+            return self.inference(source_batched_inputs, cfg = None)
         # source domain input
         if source_batched_inputs is not None:
             s_images = self.preprocess_image(source_batched_inputs)
@@ -126,7 +129,7 @@ class SAPRCNN(GeneralizedRCNN):
                     # losses.update(mt_proposal_losses)
                     # return losses
                 if pseduo_flag:
-                    t_images_output = self.inference(target_batched_inputs, do_postprocess = False, is_pseudo=True)
+                    t_images_output = self.inference(target_batched_inputs, do_postprocess = False, is_pseudo=True, cfg = None)
                     # tmp1, logits1 = self.inference(target_batched_inputs)
                     # t_images_output, _, _ = self.proposal_generator(t_images, t_features, None)
                     # t_images_output = []
@@ -171,7 +174,8 @@ class SAPRCNN(GeneralizedRCNN):
         batched_inputs: List[Dict[str, torch.Tensor]],
         detected_instances: Optional[List[Instances]] = None,
         do_postprocess: bool = True,
-        is_pseudo = False
+        is_pseudo = False,
+        cfg = None
     ):
         """
         Run inference on the given inputs.
@@ -189,7 +193,8 @@ class SAPRCNN(GeneralizedRCNN):
             Otherwise, a list[Instances] containing raw network outputs.
         """
         assert not self.training
-        setup_seed(42)
+        # setup_seed(cfg.SEED)
+        # print("sap_rcnn SAPRCNN inference seeding!")
         # print("META ARCH")
         images = self.preprocess_image(batched_inputs)
         features = self.backbone(images.tensor)
@@ -202,7 +207,7 @@ class SAPRCNN(GeneralizedRCNN):
                 assert "proposals" in batched_inputs[0]
                 proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             if is_pseudo:
-                results, _3 = self.roi_heads(images, features, proposals, None, is_pseudo=True)
+                results, _3 = self.roi_heads(images, features, proposals, None, is_pseudo=True) ###MIC
             else:
                 results, _3 = self.roi_heads(images, features, proposals, None)
         else:
