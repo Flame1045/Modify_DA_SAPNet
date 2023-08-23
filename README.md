@@ -27,6 +27,7 @@ Modify by Eric Chiu
 ```
 
 # Acknowledgement
+* [SAPNetV2](https://github.com/Shuntw6096/SAPNetV2)
 * [SAPNetDA](https://isrc.iscas.ac.cn/gitlab/research/domain-adaption)
 * [Detectron2](https://github.com/facebookresearch/detectron2)
 * [Grad-CAM.pytorch](https://github.com/yizt/Grad-CAM.pytorch)  
