@@ -18,11 +18,15 @@ pip install pycocotools # conda install -c conda-forge pycocotools -y
 
 conda install -c conda-forge tensorboard -y
 
-pip install setuptools==59.5.0 
+conda install -c anaconda networkx
 
-pip3 install numpy==1.23.5 
+// pip install setuptools==59.5.0 
+
+conda install setuptools==58.0.4
 
 pip install -U Werkzeug
+
+pip3 install numpy==1.23.1 
 
 # conda deactivate
 

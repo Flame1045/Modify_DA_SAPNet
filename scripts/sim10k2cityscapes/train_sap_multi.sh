@@ -1,3 +1,4 @@
+#!/bin/bash
 # echo "Training SAPNet iAFF pad zero"
 # bash scripts/sim10k2cityscapes/train_sapiAFFpz.sh
 
@@ -32,17 +33,28 @@
 #      bash scripts/sim10k2cityscapes/train_sapMSCAM.sh 
 # done
 
-for x in {1..5}; do
-     echo Number $x test adapterv1
-     bash scripts/sim10k2cityscapes/train_sapiAFFadapter.sh 
-done
+# for x in {1..5}; do
+#      echo Number $x test adapterv1
+#      bash scripts/sim10k2cityscapes/train_sapiAFFadapter.sh 
+# done
 
-for x in {1..5}; do
-     echo Number $x test adapterv3
-     bash scripts/sim10k2cityscapes/train_sapiAFFadapterv3.sh 
-done
+# for x in {1..5}; do
+#      echo Number $x test adapterv3
+#      bash scripts/sim10k2cityscapes/train_sapiAFFadapterv3.sh 
+# done
 
-for x in {1..5}; do
-     echo Number $x test baseline
-     bash scripts/sim10k2cityscapes/train_sap.sh 
-done
+# for x in {1..5}; do
+#      echo Number $x test baseline
+#      bash scripts/sim10k2cityscapes/train_sap.sh 
+# done
+
+# for x in {1..5}; do
+#      echo Number $x test adapterv1
+#      bash scripts/sim10k2cityscapes/train_source_only.sh 
+# done
+
+echo SAPNET BASELINE
+bash scripts/sim10k2cityscapes/train_sap.sh
+
+echo SAPNET LA-MIXUP
+bash scripts/sim10k2cityscapes/train_sap_pseudo.sh 

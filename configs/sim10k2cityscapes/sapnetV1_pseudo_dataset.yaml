@@ -3,12 +3,11 @@ DATASETS:
   SOURCE_DOMAIN:
     TRAIN: ("sim10k_train",) 
   TARGET_DOMAIN:
-    TRAIN: ("cityscapes-car_train",)
+    TRAIN: ("cityscapes-car-pseudoV2_train",)
   TRAIN: ("sim10k_train",)
   TEST: ("cityscapes-car2_val",)
 MODEL:
   META_ARCHITECTURE: "SAPRCNN"
-  ORALCLE: False
   BACKBONE:
     NAME: "build_resnet_backbone_"
     FREEZE_AT: 1

@@ -6,6 +6,8 @@ from .build import DA_HEAD_REGISTRY
 from ..layers import GradientScalarLayer
 from detectron2.utils.events import get_event_storage
 from detectron2.utils import comm
+from torch.nn.utils import spectral_norm
+from torch.nn.init import xavier_uniform_
 import random
 import numpy
 
@@ -18,8 +20,17 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True 
     torch.backends.cudnn.benchmark = False
 
+def snconv2d(in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
+    return spectral_norm(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
+                                   stride=stride, padding=padding, dilation=dilation, groups=groups, bias=bias))
+
+def init_weights(m):
+    if type(m) == nn.Linear or type(m) == nn.Conv2d:
+        xavier_uniform_(m.weight)
+        # m.bias.data.fill_(0.)
+
 @DA_HEAD_REGISTRY.register()
-class SAPNet(nn.Module):
+class SAPNet_ILLUME(nn.Module):
 
     @configurable
     def __init__(self, *, num_anchors, in_channels, embedding_kernel_size=3,
@@ -85,6 +96,7 @@ class SAPNet(nn.Module):
             DropoutModule(),
         )
 
+
         self.shared_semantic = nn.Sequential(
             nn.Conv2d(in_channels + self.num_anchors, in_channels, kernel_size=embedding_kernel_size, stride=1, padding=padding),
             nn.ReLU(True),
@@ -120,6 +132,14 @@ class SAPNet(nn.Module):
 
         self.predictor = nn.Linear(256 * channel_multiply, num_domain_classes)
 
+        self.snconv1x1_theta = snconv2d(in_channels=in_channels, out_channels=in_channels//8, kernel_size=1, stride=1, padding=0)
+        self.snconv1x1_phi = snconv2d(in_channels=in_channels, out_channels=in_channels//8, kernel_size=1, stride=1, padding=0)
+        self.snconv1x1_g = snconv2d(in_channels=in_channels, out_channels=in_channels//2, kernel_size=1, stride=1, padding=0)
+        self.snconv1x1_attn = snconv2d(in_channels=in_channels//2, out_channels=in_channels, kernel_size=1, stride=1, padding=0)
+        self.maxpool = nn.MaxPool2d(2, stride=2, padding=0)
+        self.softmax  = nn.Softmax(dim=-1)
+        self.sigma = nn.Parameter(torch.zeros(1))
+
 
     def forward(self, feature, rpn_logits, input_domain):
         '''
@@ -130,6 +150,7 @@ class SAPNet(nn.Module):
         '''
         # setup_seed(42)
         # print("SAPNET")
+        toatt_feature = feature
         feature = self.grl(feature)
         rpn_logits_ = []
         for r in rpn_logits:
@@ -186,6 +207,45 @@ class SAPNet(nn.Module):
         del pyramid_features, w, split, merge, fuse, feature, rpn_logits
         final_features = final_features.view(N, -1) # semantic vector
 
+
+        ######ILLUME######
+        # self.apply(init_weights)
+
+        _, ch, h, w = toatt_feature.size()
+        # Theta path
+        theta = self.snconv1x1_theta(toatt_feature)
+        theta = theta.view(-1, ch//8, h*w)
+
+        # Phi path
+        phi = self.snconv1x1_phi(toatt_feature)
+        phi = self.maxpool(phi)
+        phi = phi.view(-1, ch//8, phi.shape[2]*phi.shape[3])
+
+        # Attn map
+        attn = torch.bmm(theta.permute(0, 2, 1), phi)
+        attn = self.softmax(attn)
+
+        # g path
+        g = self.snconv1x1_g(toatt_feature)
+        g = self.maxpool(g)
+
+        g = g.view(-1, ch//2, g.shape[2]*g.shape[3])
+        # Attn_g
+        attn_g = torch.bmm(g, attn.permute(0, 2, 1))
+
+        attn_g = attn_g.view(-1, ch//2, h, w)
+        attn_g = self.snconv1x1_attn(attn_g)    
+        #Out
+        att = toatt_feature + self.sigma*attn_g
+
+        ######ILLUME#######
+
+        d = torch.cat((final_features,final_features,final_features,final_features),1)
+        d = d[:, None, None, :]
+        att = att.permute(0,2,3,1)
+        final_out = att * d
+        final_out = final_out.permute(0,3,1,2)
+
         logits = self.predictor(final_features)
 
         if input_domain == 'source':
@@ -193,13 +253,13 @@ class SAPNet(nn.Module):
             with torch.no_grad():
                 s_acc = (torch.softmax(logits, dim=1).argmax(dim=1) == 0).float().mean()
                 self.write_acc(s_acc, 'source')
-            return {'loss_sap_source_domain': domain_loss}
+            return {'loss_sap_source_domain': domain_loss}, final_out
         elif input_domain == 'target':
             domain_loss = self.loss_func(logits, torch.ones(logits.size(0), dtype=torch.long, device=logits.device))
             with torch.no_grad():
                 t_acc = (torch.softmax(logits, dim=1).argmax(dim=1) == 1).float().mean()
                 self.write_acc(t_acc, 'target')
-            return {'loss_sap_target_domain': domain_loss}
+            return {'loss_sap_target_domain': domain_loss}, final_out
 
     def write_acc(self, tensor, name):
         if comm.is_main_process():

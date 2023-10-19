@@ -11,6 +11,8 @@ from detectron2.engine import DefaultTrainer, create_ddp_model, SimpleTrainer, h
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.modeling import build_model
 from detectron2.structures import ImageList, Instances, Boxes
+from detectron2.data import MetadataCatalog
+import detectron2.data.transforms as T
 from typing import Dict, List, Optional, Tuple
 from torch.nn.parallel import DataParallel, DistributedDataParallel
 from fvcore.nn.precise_bn import get_bn_modules
@@ -21,6 +23,11 @@ from .da_heads.masking import Masking
 from .da_heads.teacher import EMATeacher
 import numpy as np
 import random
+import cv2
+from .modeling.bounding_box import BoxList
+import sys
+import os
+import shutil
 
 
 def setup_seed(seed):
@@ -146,6 +153,197 @@ class _DATrainer_MIC(SimpleTrainer):
         self._write_metrics(loss_dict, data_time)
         self.optimizer.step()
 
+class DefaultPredictor:
+    """
+    Create a simple end-to-end predictor with the given config that runs on
+    single device for a single input image.
+
+    Compared to using the model directly, this class does the following additions:
+
+    1. Load checkpoint from `cfg.MODEL.WEIGHTS`.
+    2. Always take BGR image as the input and apply conversion defined by `cfg.INPUT.FORMAT`.
+    3. Apply resizing defined by `cfg.INPUT.{MIN,MAX}_SIZE_TEST`.
+    4. Take one input image and produce a single output, instead of a batch.
+
+    This is meant for simple demo purposes, so it does the above steps automatically.
+    This is not meant for benchmarks or running complicated inference logic.
+    If you'd like to do anything more complicated, please refer to its source code as
+    examples to build and use the model manually.
+
+    Attributes:
+        metadata (Metadata): the metadata of the underlying dataset, obtained from
+            cfg.DATASETS.TEST.
+
+    Examples:
+    ::
+        pred = DefaultPredictor(cfg)
+        inputs = cv2.imread("input.jpg")
+        outputs = pred(inputs)
+    """
+
+    def __init__(self, cfg):
+        self.cfg = cfg.clone()  # cfg can be modified by model
+        self.model = build_model(self.cfg)
+        self.model.eval()
+        if len(cfg.DATASETS.TRAIN):
+            self.metadata = MetadataCatalog.get(cfg.DATASETS.TRAIN[0])
+
+        checkpointer = DetectionCheckpointer(self.model)
+        checkpointer.load(cfg.MODEL.PSEUDO_WEIGHTS)
+        print("Load PSEUDO WEIGHTS: ",  cfg.MODEL.PSEUDO_WEIGHTS)
+
+        self.aug = T.ResizeShortestEdge(
+            [cfg.INPUT.MIN_SIZE_TEST, cfg.INPUT.MIN_SIZE_TEST], cfg.INPUT.MAX_SIZE_TEST
+        )
+
+        self.input_format = cfg.INPUT.FORMAT
+        assert self.input_format in ["RGB", "BGR"], self.input_format
+
+    def __call__(self, original_image):
+        """
+        Args:
+            original_image (np.ndarray): an image of shape (H, W, C) (in BGR order).
+
+        Returns:
+            predictions (dict):
+                the output of the model for one image only.
+                See :doc:`/tutorials/models` for details about the format.
+        """
+        with torch.no_grad():  # https://github.com/sphinx-doc/sphinx/issues/4258
+            # Apply pre-processing to image.
+            final_predictions = []
+            if self.input_format == "RGB":
+                # whether the model expects BGR inputs or RGB
+                original_image = original_image[:, :, ::-1]
+            height, width = original_image.shape[:2]
+            image = self.aug.get_transform(original_image).apply_image(original_image)
+            image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
+
+            inputs = {"image": image, "height": height, "width": width}
+            predictions = self.model([inputs])[0]
+
+            # get predict boxes
+            pred_bboxes = predictions['instances']._fields['pred_boxes'].tensor.detach()
+            # get predict logits(which can be negative and need to be converted to probability))
+            scores = predictions['instances']._fields['scores'].detach()
+            # filter out low probability boxes, and its corresponding labels
+            filtered_idx = scores>=0.85
+            filtered_bboxes = pred_bboxes[filtered_idx]
+            # create new BoxList, which is used to store filtered_bboxes(Tensor)
+            new_bbox_list = BoxList(filtered_bboxes, predictions['instances']._image_size, mode="xyxy")
+            # convert to gt_instances format(Instances)
+            final_predictions = Instances(new_bbox_list.size)
+            final_predictions.pred_boxes = Boxes(new_bbox_list.bbox)
+            final_predictions.scores = predictions['instances']._fields['scores'][filtered_idx]
+            final_predictions.pred_classes = predictions['instances']._fields['pred_classes'][filtered_idx]
+
+            return final_predictions
+
+
+class _DATrainer_Pseudo_gen(SimpleTrainer):
+    # one2one domain adpatation trainer
+    def __init__(self, model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg):
+        """
+        Args:
+            model: a torch Module. Takes a data from data_loader and returns a
+                dict of losses.
+            data_loader: an iterable. Contains data to be used to call model.
+            optimizer: a torch optimizer.
+        """
+        super(SimpleTrainer).__init__()
+
+        """
+        We set the model to training mode in the trainer.
+        However it's valid to train a model that's in eval mode.
+        If you want your model (or a submodule of it) to behave
+        like evaluation during training, you can overwrite its train() method.
+        """
+        setup_seed(cfg.SEED)
+        print("trainer _DATrainer_MIC __init__ seeding")
+        model.train()
+        self.model = model
+        self.source_domain_data_loader = source_domain_data_loader
+        self.target_domain_data_loader = target_domain_data_loader
+        self._source_domain_data_loader_iter = iter(source_domain_data_loader)
+        self._target_domain_data_loader_iter = iter(target_domain_data_loader)
+        self.loss_weight = loss_weight
+        self.optimizer = optimizer
+        self.cfg = cfg
+        self.predictor = DefaultPredictor(cfg)
+        
+
+    def run_step(self):
+        # setup_seed(self.cfg.SEED)
+        # print("trainer _DATrainer_MIC run_step seeding")
+        assert self.model.training, "[_DATrainer] model was changed to eval mode!"
+
+        if self.cfg.MODEL.DA_HEAD.Pseudo_gen == True:
+            self.model.eval()
+
+            try:
+                print('Annotations copying')
+                shutil.copytree('datasets/Cityscapes-coco/VOC2007-car-train/Annotations', 
+                            'datasets/Cityscapes-coco/pseudo_img_v2/Annotations',  dirs_exist_ok=True)
+                print('Annotations copy finish!')
+            except Exception as e:
+                print('Directory not copied.')
+                print(e)
+                sys.exit(1) # Failed
+
+            try:
+                print('ImageSets txt copying')
+                shutil.copytree('datasets/Cityscapes-coco/VOC2007-car-train/ImageSets', 
+                                'datasets/Cityscapes-coco/pseudo_img_v2/ImageSets',  dirs_exist_ok=True)
+                print('ImageSets txt copy finish!')
+            except Exception as e:
+                print('Directory not copied.')
+                print(e)
+                sys.exit(1) # Failed
+
+            try:        
+                print('JPEGImages copying (about 3 minutes)')
+                # shutil.copytree('datasets/Cityscapes-coco/VOC2007-car-train/JPEGImages.zip', 
+                #                 'datasets/Cityscapes-coco/pseudo_img_v2',  dirs_exist_ok=True)
+                from tqdm import tqdm
+                import zipfile
+                with zipfile.ZipFile('datasets/Cityscapes-coco/VOC2007-car-train/JPEGImages.zip') as zf:
+                    for member in tqdm(zf.infolist(), desc='Extracting '):
+                        try:
+                            zf.extract(member, 'datasets/Cityscapes-coco/pseudo_img_v2')
+                        except zipfile.error as e:
+                            pass
+                print('JPEGImages copy finish!')
+            except Exception as e:
+                print('Directory not copied.')
+                print(e)
+                sys.exit(1) # Failed
+
+            for i in range(0, 1000):
+                print(i+1,"/1000")
+                t_pseudo = []
+                t_data = next(self._target_domain_data_loader_iter)
+                for j in range(0,2):
+                    im = cv2.imread(t_data[j].get('file_name'), cv2.IMREAD_COLOR)
+                    t_pseudo.append(self.predictor(im))
+                pseudo_dataset_gen(self.cfg, t_data, t_pseudo)
+
+            sys.exit(0) # Success        
+        else:
+            start = time.perf_counter()
+            s_data = next(self._source_domain_data_loader_iter)
+            data_time = time.perf_counter() - start
+
+            start = time.perf_counter()
+            t_data = next(self._target_domain_data_loader_iter)
+            data_time = time.perf_counter() - start + data_time
+            loss_dict = self.model(source_batched_inputs=s_data, target_batched_inputs=t_data, cfg=self.cfg)
+
+        loss_dict = {l: self.loss_weight[l] * loss_dict[l] for l in self.loss_weight}
+        losses = sum(loss_dict.values())
+        self.optimizer.zero_grad()
+        losses.backward()
+        self._write_metrics(loss_dict, data_time)
+        self.optimizer.step()
 
 class _DAAMPTrainer(_DATrainer):
     def __init__(self, model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, grad_scaler=None):
@@ -254,7 +452,19 @@ class DATrainer(DefaultTrainer):
             teacher_model.eval()
             self._trainer = (_DATrainer_MIC)(
                 model, teacher_model, masking, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg
-            )     
+            ) 
+        if cfg.MODEL.FINETUNE_PSEUDO_FINETUNE_PSEUDO_ON:
+            loss_weight.update({'loss_target_MS': cfg.MODEL.FINETUNE_PSEUDO_TARGET_WEIGHTS, 
+                                'loss_source_MS': cfg.MODEL.FINETUNE_PSEUDO_SOURCE_WEIGHTS})
+            
+        if cfg.MODEL.ORALCLE:
+            loss_weight.update({'ORALCLE_loss_cls': 1, 'ORALCLE_loss_box_reg': 1, 
+                                'ORALCLE_loss_rpn_cls': 1, 'ORALCLE_loss_rpn_loc': 1,})
+
+        if cfg.MODEL.DA_HEAD.Pseudo_gen:
+           self._trainer = (_DATrainer_Pseudo_gen)(
+                model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg
+           )
         else:
             self._trainer = (_DAAMPTrainer if cfg.SOLVER.AMP.ENABLED else _DATrainer)(
                 model, source_domain_data_loader, target_domain_data_loader, loss_weight, optimizer, cfg
@@ -615,3 +825,191 @@ def my_preprocess_image(self, batched_inputs: List[Dict[str, torch.Tensor]]):
             padding_constraints=self.backbone.padding_constraints,
         )
         return images
+
+def pseudo_dataset_gen(cfg, t_data, t_out):
+    from pascal_voc_writer import Writer
+    from detectron2.utils.visualizer import Visualizer, ColorMode
+    from detectron2.data.datasets import load_voc_instances
+    import cv2
+    from datetime import datetime
+    from pathlib import Path
+    from detectron2.engine import DefaultPredictor
+
+    for dataset_name in cfg.DATASETS.TRAIN:
+        now = datetime.now()
+        xml_path =  Path(__file__).parent.parent/'datasets'/'Cityscapes-coco'/'pseudo_img_v2'/'Annotations'
+        image_path = Path(__file__).parent.parent/'datasets'/'Cityscapes-coco'/'pseudo_img_v2'/'JPEGImages'
+        split_path = Path(__file__).parent.parent/'datasets'/'Cityscapes-coco'/'pseudo_img_v2'/'ImageSets'/'Main'
+        xml_path.mkdir(parents=True, exist_ok=True)
+        image_path.mkdir(parents=True, exist_ok=True)
+        split_path.mkdir(parents=True, exist_ok=True)
+        
+        im1 = cv2.imread(t_data[0].get('file_name'), cv2.IMREAD_COLOR)
+        im2 = cv2.imread(t_data[1].get('file_name'), cv2.IMREAD_COLOR)
+        writer = Writer(t_data[1].get('file_name')[:-4] + '_pseudo' + '.jpg', 2048, 1024)
+        # if t_data[1].get('image_id') == 'aachen_000067_000019_leftImg8bit' or t_data[0].get('image_id') == 'aachen_000067_000019_leftImg8bit':
+        #     print(1)
+        writed_box = []
+        background_img_list = t_out[1]._fields['pred_boxes']
+        add_img_list = t_out[0]._fields['pred_boxes']
+
+
+
+        ##################V1##################
+        # for i, box in enumerate(add_img_list):
+        #     x1, y1, x2, y2 = map(int, box)
+        #     x1, y1, x2, y2 = map(lambda x: 0 if x < 0 else x, [x1, y1, x2, y2])
+        #     _trim = False
+        #     for j, bbox in enumerate(background_img_list):
+        #         if intersect_ratios(box, bbox)[0] >= 0.65 or bbox_inside(box, bbox) or bbox_inside(bbox, box):
+        #             _trim = True
+        #             break
+        #     for wbox in writed_box:
+        #         if intersect_ratios(box, wbox)[0] >= 0.65 or bbox_inside(box, wbox) or bbox_inside(wbox, box):
+        #             _trim = True
+        #             break
+        #     if not _trim:
+        #         im2[y1 : y2, x1 : x2] = im1[y1 : y2, x1 : x2]
+        #         writer.addObject('car', x1, y1, x2, y2)
+        #         writed_box.append(box)
+        # for j, bbox in enumerate(background_img_list):
+        #     x1, y1, x2, y2 = map(int, bbox)
+        #     x1, y1, x2, y2 = map(lambda x: 0 if x < 0 else x, [x1, y1, x2, y2])
+        #     for wbox in writed_box:
+        #         if intersect_ratios(bbox, wbox)[0] >= 0.65 or bbox_inside(bbox, wbox) or bbox_inside(wbox, bbox):
+        #             continue
+        #         writer.addObject('car', x1, y1, x2, y2)
+                    
+        # xml_name = t_data[1].get('image_id') + '_pseudo' + '.xml'
+        # writer.save(xml_path/xml_name)
+        # with open(split_path/'train.txt', 'a') as f:
+        #     f.write(t_data[1].get('image_id') + '_pseudo' + '\n')
+        # v = Visualizer(im2[:, :, ::-1], MetadataCatalog.get(dataset_name), scale=1.0, instance_mode=ColorMode.IMAGE)
+        # image_name = str(image_path/'{}.png').format(Path(t_data[1].get('file_name')).stem)
+        # cv2.imwrite(image_name, v.img)
+        # os.rename(image_name, image_name[:-4] + '_pseudo' + '.jpg')
+
+        ##################V2##################
+        # sort boxes by area
+        tmp = []
+        for i, box in enumerate(add_img_list):
+            x1, y1, x2, y2 = box
+            area = (x2 - x1) * (y2 - y1)
+            tmp.append({'area': area, 'box': box})
+        tmp.sort(key=lambda tmp: tmp['area'], reverse=True)
+        sorted_boxes_big = []
+        sorted_area_big = []
+        sorted_boxes_small = []
+        sorted_area_small = []
+        for l in tmp:
+            if l['area'] >= 100000:
+                sorted_boxes_big.append(l['box'])
+                sorted_area_big.append(l['area'])
+            else:
+                sorted_boxes_small.append(l['box'])
+                sorted_area_small.append(l['area'])
+        
+        # do big
+        for i, box in enumerate(sorted_boxes_big):
+            x1, y1, x2, y2 = map(int, box)
+            x1, y1, x2, y2 = map(lambda x: 0 if x < 0 else x, [x1, y1, x2, y2])
+            _trim = False
+            for j, box2 in enumerate(background_img_list):
+                if intersect_ratios(box, box2)[0] >= 0.65 or bbox_inside(box, box2):
+                    _trim = True
+                    break
+            for wbox in writed_box:
+                if intersect_ratios(box, wbox)[0] >= 0.65 or bbox_inside(box, wbox):
+                    _trim = True
+                    break
+            if not _trim:
+                im2[y1 : y2, x1 : x2] = im1[y1 : y2, x1 : x2]
+                writer.addObject('car', x1, y1, x2, y2)
+                writed_box.append(box)
+        for j, box2 in enumerate(background_img_list):
+            x1, y1, x2, y2 = map(int, box2)
+            x1, y1, x2, y2 = map(lambda x: 0 if x < 0 else x, [x1, y1, x2, y2])
+            _trim = False
+            for wbox in writed_box:
+                if intersect_ratios(box2, wbox)[0] >= 0.65 or bbox_inside(box2, wbox):
+                    _trim = True
+                    break
+            if not _trim:
+                writer.addObject('car', x1, y1, x2, y2)
+
+        xml_name = t_data[1].get('image_id') + '_big_pseudo' + '.xml'
+        writer.save(xml_path/xml_name)
+        with open(split_path/'train.txt', 'a') as f:
+            f.write(t_data[1].get('image_id') + '_big_pseudo' + '\n')
+        v = Visualizer(im2[:, :, ::-1], MetadataCatalog.get(dataset_name), scale=1.0, instance_mode=ColorMode.IMAGE)
+        image_name = str(image_path/'{}_big.png').format(Path(t_data[1].get('file_name')).stem)
+        v.get_output().save(image_name)
+        os.rename(image_name, image_name[:-4] + '_pseudo' + '.jpg')
+
+        # do small
+        for i, box in enumerate(sorted_boxes_small):
+            x1, y1, x2, y2 = map(int, box)
+            x1, y1, x2, y2 = map(lambda x: 0 if x < 0 else x, [x1, y1, x2, y2])
+            _trim = False
+            for j, box2 in enumerate(background_img_list):
+                if intersect_ratios(box, box2)[0] >= 0.65 or bbox_inside(box, box2):
+                    _trim = True
+                    break
+            for wbox in writed_box:
+                if intersect_ratios(box, wbox)[0] >= 0.65 or bbox_inside(box, wbox):
+                    _trim = True
+                    break
+            if not _trim:
+                im2[y1 : y2, x1 : x2] = im1[y1 : y2, x1 : x2]
+                writer.addObject('car', x1, y1, x2, y2)
+                writed_box.append(box)
+        for j, box2 in enumerate(background_img_list):
+            x1, y1, x2, y2 = map(int, box2)
+            x1, y1, x2, y2 = map(lambda x: 0 if x < 0 else x, [x1, y1, x2, y2])
+            _trim = False
+            for wbox in writed_box:
+                if intersect_ratios(box2, wbox)[0] >= 0.65 or bbox_inside(box2, wbox):
+                    _trim = True
+                    break
+            if not _trim:
+                writer.addObject('car', x1, y1, x2, y2)
+                    
+        xml_name = t_data[1].get('image_id') + '_small_pseudo' + '.xml'
+        writer.save(xml_path/xml_name)
+        with open(split_path/'train.txt', 'a') as f:
+            f.write(t_data[1].get('image_id') + '_small_pseudo' + '\n')
+        v = Visualizer(im2[:, :, ::-1], MetadataCatalog.get(dataset_name), scale=1.0, instance_mode=ColorMode.IMAGE)
+        image_name = str(image_path/'{}_small.png').format(Path(t_data[1].get('file_name')).stem)
+        v.get_output().save(image_name)
+        os.rename(image_name, image_name[:-4] + '_pseudo' + '.jpg')
+
+'''
+# def location_aware_trim():
+#     annotations_trimmed = []
+#     for ann in t_out[0]._fields['pred_boxes']:
+#         _trim = False
+#         for ann2 in t_out[1]._fields['pred_boxes']:
+#             if intersect_ratios(ann, ann2)[0] >= 0.65 or bbox_inside(ann, ann2):
+#                 _trim = True
+#                 break
+#         if not _trim:
+#             annotations_trimmed.append(ann)
+#     for ann in t_out[1]._fields['pred_boxes']:
+#         annotations_trimmed.append(ann)
+#     return annotations_trimmed
+'''
+def intersect_ratios(bbox1, bbox2):
+    x11, y11, x12, y12 = bbox1
+    x21, y21, x22, y22 = bbox2
+    xA, yA = max(x11,x21), max(y11,y21)
+    xB, yB = min(x12,x22), min(y12,y22)
+
+    area1 = (x12 - x11) * (y12 - y11)
+    area2 = (x22 - x21) * (y22 - y21)
+    overlap = max(xB - xA, 0) * max(yB - yA, 0)
+    return overlap / area1, overlap / area2
+
+def bbox_inside(bbox1, bbox2, eps=1.0):
+    x11, y11, x12, y12 = bbox1
+    x21, y21, x22, y22 = bbox2
+    return x11 + eps >= x21 and y11 + eps >= y21 and x12 <= x22 + eps and y12 <= y22 + eps

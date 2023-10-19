@@ -1,0 +1,29 @@
+conda create -n DA_new python==3.8.11 -y
+
+conda activate DA_new2
+
+conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia -y
+
+python -m pip install -e detectron2
+
+conda install -c conda-forge kornia -y
+
+conda install -c conda-forge einops -y
+
+conda install -c conda-forge timm -y
+
+pip install opencv-python
+
+pip install pycocotools 
+
+conda install -c conda-forge tensorboard -y
+
+conda install -c anaconda networkx -y
+
+pip install pascal-voc-writer
+
+conda install setuptools==58.0.4 -y
+
+pip install -U Werkzeug
+
+pip3 install numpy==1.23.1 

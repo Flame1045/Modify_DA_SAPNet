@@ -8,7 +8,6 @@ DATASETS:
   TEST: ("cityscapes-car2_val",)
 MODEL:
   META_ARCHITECTURE: "SAPRCNN"
-  ORALCLE: False
   BACKBONE:
     NAME: "build_resnet_backbone_"
     FREEZE_AT: 1
@@ -20,7 +19,8 @@ MODEL:
     NUM_CLASSES: 1
     NAME: "Res5ROIHeads_"
   DA_HEAD:
-    NAME: "SAPNet" # not use MSCAM
+    NAME: "SAPNet_ILLUME_a" # not use MSCAM
+    ILLUME: True
     MIC_ON: False
     IN_FEATURE: "res4"
     IN_CHANNELS: 1024

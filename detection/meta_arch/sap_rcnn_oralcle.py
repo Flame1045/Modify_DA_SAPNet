@@ -62,7 +62,7 @@ class ResidualConnet(nn.Module):
         return out
 
 @META_ARCH_REGISTRY.register()
-class SAPRCNN(GeneralizedRCNN):
+class SAPRCNN_ORALCLE(GeneralizedRCNN):
     @configurable
     def __init__(
         self,
@@ -146,6 +146,8 @@ class SAPRCNN(GeneralizedRCNN):
         # target domain input, proposal_generator == RPN
         if self.da_heads:
             if target_batched_inputs is not None:
+                if "instances" in target_batched_inputs[0]:
+                    target_gt_instances = [x["instances"].to(self.device) for x in target_batched_inputs]
                 t_images = self.preprocess_image(target_batched_inputs)
                 t_features = self.backbone(t_images.tensor)
             if cfg.MODEL.DA_HEAD.MIC_ON:
@@ -176,7 +178,7 @@ class SAPRCNN(GeneralizedRCNN):
                 t_features[self.in_feature_da_heads] = self.resconnet(ILLUME_target_features, t_features[self.in_feature_da_heads])
 
             else:
-                _, medm_loss, t_rpn_logits = self.proposal_generator(t_images, t_features, cfg=cfg)
+                t_proposals, t_proposal_losses, t_rpn_logits = self.proposal_generator(t_images, t_features, target_gt_instances, cfg=cfg)  ###
                 s_proposals, proposal_losses, s_rpn_logits = self.proposal_generator(s_images, s_features, gt_instances, cfg=cfg)
                 da_source_loss = self.da_heads(s_features[self.in_feature_da_heads], s_rpn_logits, 'source')
                 da_target_loss = self.da_heads(t_features[self.in_feature_da_heads], t_rpn_logits, 'target')
@@ -199,10 +201,22 @@ class SAPRCNN(GeneralizedRCNN):
 
         if source_batched_inputs is not None:
             _, detector_losses = self.roi_heads(s_images, s_features, s_proposals, gt_instances)
+        if target_batched_inputs is not None:
+            _, target_detector_losses = self.roi_heads(t_images, t_features, t_proposals, target_gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
                 self.visualize_training(source_batched_inputs, s_proposals)
+
+        # print('target_detector_losses:',target_detector_losses)
+        # print('t_proposal_losses:',t_proposal_losses)
+
+        t_proposal_losses['ORALCLE_loss_rpn_cls'] = t_proposal_losses['loss_rpn_cls'].clone()
+        t_proposal_losses['ORALCLE_loss_rpn_loc'] = t_proposal_losses['loss_rpn_loc'].clone() 
+        target_detector_losses['ORALCLE_loss_cls'] = target_detector_losses['loss_cls'].clone()
+        target_detector_losses['ORALCLE_loss_box_reg'] = target_detector_losses['loss_box_reg'].clone()
+        del target_detector_losses['loss_cls'], target_detector_losses['loss_box_reg']
+        del t_proposal_losses['loss_rpn_cls'], t_proposal_losses['loss_rpn_loc']
 
         losses = {}
         losses.update(detector_losses)
@@ -210,8 +224,8 @@ class SAPRCNN(GeneralizedRCNN):
         if self.da_heads:
             losses.update(da_source_loss)
             losses.update(da_target_loss)
-            if medm_loss:
-                losses.update(medm_loss)
+            # if medm_loss:
+            #     losses.update(medm_loss)
         if pseudo_gt is not None:
             losses.update(mt_proposal_losses)
             losses.update(mt_detector_losses)
@@ -219,6 +233,9 @@ class SAPRCNN(GeneralizedRCNN):
         if cfg.MODEL.FINETUNE_PSEUDO_FINETUNE_PSEUDO_ON:
             losses.update({'loss_target_MS': t_MSLoss,
                            'loss_source_MS': s_MSLoss})
+        if cfg.MODEL.ORALCLE:
+            losses.update(target_detector_losses)
+            losses.update(t_proposal_losses)
         return losses
 
     def inference(

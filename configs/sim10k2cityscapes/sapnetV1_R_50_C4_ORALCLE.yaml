@@ -7,8 +7,8 @@ DATASETS:
   TRAIN: ("sim10k_train",)
   TEST: ("cityscapes-car2_val",)
 MODEL:
-  META_ARCHITECTURE: "SAPRCNN"
-  ORALCLE: False
+  META_ARCHITECTURE: "SAPRCNN_ORALCLE"
+  ORALCLE: True
   BACKBONE:
     NAME: "build_resnet_backbone_"
     FREEZE_AT: 1

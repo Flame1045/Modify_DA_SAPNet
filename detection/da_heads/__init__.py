@@ -8,6 +8,9 @@ from .sapnetiAFFpool import SAPNetiAFFpool
 from .sapnetiAFFadapter import SAPNetiAFFadapter
 from .sapnetiAFFadapterv2 import SAPNetiAFFadapterv2
 from .sapnetiAFFadapterv3 import SAPNetiAFFadapterv3
+from .ILLUME import SAPNet_ILLUME
+from .ILLUME2 import SAPNet_ILLUME2
+from .ILLUME_after_rpn import SAPNet_ILLUME_a
 from .build import build_DAHead
 from .masking import Masking
 from .teacher import EMATeacher

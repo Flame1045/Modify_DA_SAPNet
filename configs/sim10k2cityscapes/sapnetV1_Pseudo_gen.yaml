@@ -8,11 +8,11 @@ DATASETS:
   TEST: ("cityscapes-car2_val",)
 MODEL:
   META_ARCHITECTURE: "SAPRCNN"
-  ORALCLE: False
   BACKBONE:
     NAME: "build_resnet_backbone_"
     FREEZE_AT: 1
   WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  PSEUDO_WEIGHTS: ""
   KEYPOINT_ON: False
   MASK_ON: False
   DOMAIN_ADAPTATION_ON: True
@@ -20,6 +20,7 @@ MODEL:
     NUM_CLASSES: 1
     NAME: "Res5ROIHeads_"
   DA_HEAD:
+    Pseudo_gen: True
     NAME: "SAPNet" # not use MSCAM
     MIC_ON: False
     IN_FEATURE: "res4"

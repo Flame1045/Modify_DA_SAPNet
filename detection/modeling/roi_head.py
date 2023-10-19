@@ -346,7 +346,7 @@ def fast_rcnn_inference_single_image(
     """
     valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
     indices = torch.arange(start=0, end=scores.shape[0], dtype=int)
-    indices = indices.expand((scores.shape[1], scores.shape[0])).T
+    indices = indices.expand((scores.shape[1], scores.shape[0])).T.to('cuda:0')
     if not valid_mask.all():
         boxes = boxes[valid_mask]
         scores = scores[valid_mask]

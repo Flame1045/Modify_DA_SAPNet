@@ -61,6 +61,20 @@ years = 2007
 meta_name = 'cityscapes-car_{}'.format(split)
 register_pascal_voc(meta_name, dataset_dir, split, years, classes)
 
+dataset_dir = str(dataset_base_dir/'Cityscapes-coco'/'pseudo_img') #############KITTI############## #############SIM##############
+split = 'train' # "train", "test", "val", "trainval"
+classes = ('car', )
+years = 2007
+meta_name = 'cityscapes-car-pseudoV1_{}'.format(split)
+register_pascal_voc(meta_name, dataset_dir, split, years, classes)
+
+dataset_dir = str(dataset_base_dir/'Cityscapes-coco'/'pseudo_img_v2') #############KITTI############## #############SIM##############
+split = 'train' # "train", "test", "val", "trainval"
+classes = ('car', )
+years = 2007
+meta_name = 'cityscapes-car-pseudoV2_{}'.format(split)
+register_pascal_voc(meta_name, dataset_dir, split, years, classes)
+
 dataset_dir = str(dataset_base_dir/'Cityscapes-coco'/'VOC2007-car2')  #############KITTI############## #############SIM##############
 split = 'val' # "train", "test", "val", "trainval"
 classes = ('car', )

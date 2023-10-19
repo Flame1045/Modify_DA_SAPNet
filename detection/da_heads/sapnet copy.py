@@ -135,10 +135,9 @@ class SAPNet(nn.Module):
         for r in rpn_logits:
             r = self.grl(r)
             if feature.shape != r.shape:
-                r = F.interpolate(r, size=(feature.size(2), feature.size(3)))
-                                  # mode='bilinear', align_corners=True
-                                  
-
+                r.detach().cpu()
+                r = F.interpolate(r, size=(feature.size(2), feature.size(3)), mode='bilinear', align_corners=True)
+                r.to('cuda:0')
             rpn_logits_.append(r)
 
         semantic_map = torch.cat([feature, *rpn_logits_], dim=1)
@@ -158,9 +157,9 @@ class SAPNet(nn.Module):
                     stride = 1  # default
                 x = self.pool_func(feature, kernel_size=k, stride=stride) # spatial pyramid pooling
             _, _, h, w = x.shape
-            semantic_map_per_level = F.interpolate(semantic_map, size=(h, w)) 
-                                                   # mode='bilinear', align_corners=True
-                                                   # down sampling at spatial attention part
+            semantic_map.detach().cpu()
+            semantic_map_per_level = F.interpolate(semantic_map, size=(h, w), mode='bilinear', align_corners=True)# down sampling at spatial attention part
+            semantic_map.to('cuda:0')
             domain_logits = self.semantic_list[i](semantic_map_per_level) # spatial attention weight, it will re-weight features
 
             w_spatial = domain_logits.view(N, -1)
@@ -234,9 +233,9 @@ class SAPNet(nn.Module):
         for r in rpn_logits:
             r = self.grl(r)
             if feature.shape != r.shape:
-                r = F.interpolate(r, size=(feature.size(2), feature.size(3)))
-                                  # mode='bilinear', align_corners=True
-                                  
+                r.detach().cpu()
+                r = F.interpolate(r, size=(feature.size(2), feature.size(3)), mode='bilinear', align_corners=True)
+                r.to('cudaL:0')
             rpn_logits_.append(r)
         semantic_map = torch.cat([feature, *rpn_logits_], dim=1)
         semantic_map = self.shared_semantic(semantic_map)
@@ -255,9 +254,9 @@ class SAPNet(nn.Module):
                     stride = 1  # default
                 x = self.pool_func(feature, kernel_size=k, stride=stride) # spatial pyramid pooling
             _, _, h, w = x.shape
-            semantic_map_per_level = F.interpolate(semantic_map, size=(h, w)) 
-                                                   # mode='bilinear', align_corners=True
-                                                   # down sampling at spatial attention part
+            semantic_map_per_level.detach().cpu()
+            semantic_map_per_level = F.interpolate(semantic_map, size=(h, w), mode='bilinear', align_corners=True)# down sampling at spatial attention part
+            semantic_map_per_level.to('cuda:0')
             domain_logits = self.semantic_list[i](semantic_map_per_level) # spatial attention weight, it will re-weight features
 
             w_spatial = domain_logits.view(N, -1)
@@ -284,9 +283,9 @@ class SAPNet(nn.Module):
         for r in rpn_logits:
             r = self.grl(r)
             if feature.shape != r.shape:
-                r = F.interpolate(r, size=(feature.size(2), feature.size(3)))
-                                  # mode='bilinear', align_corners=True
-                                  
+                r.detach().cpu()
+                r = F.interpolate(r, size=(feature.size(2), feature.size(3)), mode='bilinear', align_corners=True)
+                r.to('cuda:0')
 
             rpn_logits_.append(r)
 
@@ -307,9 +306,9 @@ class SAPNet(nn.Module):
                     stride = 1  # default
                 x = self.pool_func(feature, kernel_size=k, stride=stride) # spatial pyramid pooling
             _, _, h, w = x.shape
-            semantic_map_per_level = F.interpolate(semantic_map, size=(h, w))
-                                                    # mode='bilinear', align_corners=True
-                                                    # down sampling at spatial attention part
+            semantic_map_per_level.detach().cpu()
+            semantic_map_per_level = F.interpolate(semantic_map, size=(h, w), mode='bilinear', align_corners=True)# down sampling at spatial attention part
+            semantic_map_per_level.to('cuda:0')
             domain_logits = self.semantic_list[i](semantic_map_per_level) # spatial attention weight, it will re-weight features
 
             w_spatial = domain_logits.view(N, -1)

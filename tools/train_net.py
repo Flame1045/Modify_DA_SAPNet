@@ -33,6 +33,7 @@ import detection.data.register
 # register compoments
 import detection.modeling
 from detection.meta_arch.sap_rcnn import SAPRCNN
+from detection.meta_arch.sap_rcnn_oralcle import SAPRCNN_ORALCLE
 from detection.da_heads import build_DAHead
 from detection.modeling.rpn import SAPRPN
 
@@ -63,6 +64,18 @@ def add_saprcnn_config(cfg):
     _C.MODEL.DA_HEAD.RPN_MEDM_ON = False
     _C.MODEL.DA_HEAD.TARGET_ENT_LOSS_WEIGHT = 0.
     _C.MODEL.DA_HEAD.TARGET_DIV_LOSS_WEIGHT = 0.
+    ##########ILLUME############
+    _C.MODEL.DA_HEAD.ILLUME = False
+    ##########ILLUME############
+
+    ##########Pseudo_gen############
+    _C.MODEL.DA_HEAD.Pseudo_gen = False
+    _C.MODEL.PSEUDO_WEIGHTS =  ""
+    _C.MODEL.FINETUNE_PSEUDO_FINETUNE_PSEUDO_ON = False
+    _C.MODEL.FINETUNE_PSEUDO_SOURCE_WEIGHTS = 1.0
+    _C.MODEL.FINETUNE_PSEUDO_TARGET_WEIGHTS = 1.0 
+    ##########Pseudo_gen############
+
     ##########MIC############
     _C.MODEL.DA_HEAD.MIC_ON = False   
     _C.MODEL.DA_HEAD.MIC_RPN_CLS_WEIGHT = 0.
@@ -79,6 +92,10 @@ def add_saprcnn_config(cfg):
     _C.MODEL.DA_HEAD.TEACHER_ALPHA = 0.9
     _C.MODEL.DA_HEAD.PSEUDO_LABEL_THRESHOLD =0.7
     ##########MIC############
+
+    ##########NEW############
+    _C.MODEL.ORALCLE = True
+    ##########NEW############
     _C.DATASETS.SOURCE_DOMAIN = CN()
     _C.DATASETS.SOURCE_DOMAIN.TRAIN = ()
     _C.DATASETS.TARGET_DOMAIN = CN()
@@ -101,6 +118,9 @@ def setup_seed(seed):
     torch.cuda.manual_seed_all(seed)           
     torch.backends.cudnn.deterministic = True 
     torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    os.environ["PYTHONHASHSEED"] = str(seed)
     
 
 def setup(args):
@@ -127,7 +147,8 @@ def setup(args):
         # set random seed
         rank = comm.get_rank()
         seed = cfg.SEED
-        seed_all_rng(None if seed < 0 else seed + rank)
+        # seed_all_rng(None if seed < 0 else seed + rank)
+        seed_all_rng(None if seed < 0 else seed)
     return cfg
 
 def test_images(cfg):
@@ -267,6 +288,26 @@ def grad_cam_object_detection(cfg):
             cv2.imwrite(str(fname), im)
             print(fname.stem)
 
+def visualize(cfg):
+    from detectron2.utils.visualizer import Visualizer, ColorMode
+    from detectron2.data import MetadataCatalog
+    from detectron2.data.datasets import load_voc_instances
+    import cv2
+    # predictor = DefaultPredictor(cfg)
+
+    for dataset_name in cfg.DATASETS.VIS:
+        now = datetime.now()
+        output_dir = Path(__file__).parent.parent/ 'test_images'/ (dataset_name + '-' + now.strftime("%y-%m-%d_%H-%M"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        dirname = MetadataCatalog.get(dataset_name).get('dirname')
+        split = MetadataCatalog.get(dataset_name).get('split')
+        thing_classes = MetadataCatalog.get(dataset_name).get('thing_classes')
+        for d in iter(load_voc_instances(dirname, split, thing_classes)):
+            im = cv2.imread(d.get('file_name'), cv2.IMREAD_COLOR)
+            v = Visualizer(im[:, :, ::-1], MetadataCatalog.get(dataset_name), scale=1.0, instance_mode=ColorMode.IMAGE)
+            # outputs = predictor(im)
+            cv2.imwrite(str(output_dir/'{}.jpg').format(Path(d.get('file_name')).stem), v.draw_instance_predictions().get_image()[:, :, ::-1])
+
 
 def main(args):
     cfg = setup(args)
@@ -324,9 +365,13 @@ def main(args):
         grad_cam_object_detection(cfg)
         return
 
-    if args.test_images:
-        test_images(cfg)
+    if args.visaulize:
+        visualize(cfg)
         return
+
+    if args.test_images:
+       test_images(cfg)
+       return
 
     if cfg.MODEL.DOMAIN_ADAPTATION_ON:
         trainer = DATrainer(cfg)
@@ -339,6 +384,7 @@ def main(args):
 if __name__ == "__main__":
     parser = default_argument_parser()
     parser.add_argument("--test-images", action="store_true", help="output predicted bbox to test images")
+    parser.add_argument("--visaulize", action="store_true", help="visaulize dataset")
     parser.add_argument("--setting-token", help="add some simple profile about this experiment to output directory name")
     parser.add_argument("--eval-all", action="store_true", help="eval all checkpoint under the cfg.OUTPUT_DIR, and put result to its sub dir")
     parser.add_argument("--visualize-attention-mask", action="store_true", help="visualize attention mask, output directory is under test_images")

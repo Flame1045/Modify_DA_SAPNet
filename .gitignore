@@ -37,3 +37,5 @@ detection2/detection2/tracking/__pycache__/
 detection2/detection2/utils/__pycache__/
 detection2/detection2/__pycache__/
 old_outputs
+*.jpg
+*.gz
